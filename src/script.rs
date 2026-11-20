@@ -43,7 +43,7 @@ pub struct Input {
 #[derive(Deserialize, Default, Debug)]
 pub struct Output {
     /// Each action is `[id, args…]`. Ids: log, notify, start_session, stop_session, stop_all,
-    /// open_session, focus, quit, trash, show_in_files, open_editor, open_player, transcribe.
+    /// open_session, focus, quit, trash, show_in_files, open_editor, open_player, transcribe, summarize.
     #[serde(default)]
     pub acts: Vec<Vec<String>>,
     /// (session name, block id, bypassed) for every block whose `bypassed` the script changed
@@ -119,6 +119,9 @@ function __recording(r) {
     },
     transcribe: function () {
       __act('transcribe', r.path);
+    },
+    summarize: function () {
+      __act('summarize', r.path);
     }
   };
 }
@@ -276,6 +279,7 @@ pub fn help() -> String {
         ("  .openWith('editor')", tr("opens it in the audio editor from Settings")),
         ("  .openWith('player')", tr("plays it in the default player")),
         ("  .transcribe()", tr("writes a .txt next to it (KalangoOS voice model)")),
+        ("  .summarize()", tr("transcribes it if needed, then writes a .resumo.md summary next to it (local model)")),
         ("", ""),
         ("kalango", tr("the app")),
         ("  kalango.sessions()", tr("every session")),

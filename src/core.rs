@@ -690,6 +690,19 @@ impl Core {
                         Err(e) => self.log.push(format!("{stamp}  {}", trf("could not transcribe: {err}", &[("err", e)]))),
                     }
                 }
+                "summarize" => {
+                    // in the background: transcribe first when needed, then the summary beside the recording
+                    let path = std::path::PathBuf::from(&arg);
+                    if crate::voz::agent_binary().is_none() {
+                        self.log.push(format!("{stamp}  {}", crate::voz::VoiceError::NotInstalled.message()));
+                    } else {
+                        self.log.push(format!("{stamp}  {}", trf("summarizing “{path}”", &[("path", arg.clone())])));
+                        std::thread::spawn(move || {
+                            let cancel = std::sync::atomic::AtomicBool::new(false);
+                            let _ = crate::voz::summarize_recording(&path, &cancel, |_| {});
+                        });
+                    }
+                }
                 "open_editor" => {
                     let ed = self.store.prefs.audio_editor.trim().to_string();
                     if ed.is_empty() {

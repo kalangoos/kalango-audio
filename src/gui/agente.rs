@@ -305,6 +305,22 @@ pub fn when_text(w: When) -> String {
     }
 }
 
+/// The text between quotes in a request (“…”, "…" or «…»), if any.
+pub fn quoted(s: &str) -> Option<String> {
+    for (a, b) in [('“', '”'), ('"', '"'), ('«', '»')] {
+        if let Some(i) = s.find(a) {
+            let rest = &s[i + a.len_utf8()..];
+            if let Some(j) = rest.find(b) {
+                let q = rest[..j].trim();
+                if !q.is_empty() {
+                    return Some(q.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
 /// Which template a request is about (in order of how specific the words are).
 fn pick_template(n: &str) -> Option<&'static str> {
     let rules: [(&[&str], &str); 10] = [
@@ -339,13 +355,16 @@ pub fn plan(text: &str, templates: &[Template], now_min: u32, weekday: u32) -> O
     if has(&n, &["pare", "parar", "stop", "encerre", "encerrar", "termine"]) && !record {
         return Some(empty(vec![blank(Action::StopAll, tr("Stop every running session").to_string(), tr("recordings are closed properly first").to_string())]));
     }
-    // summaries: the transcript of the latest recording
+    // summaries: transcribe first when there is no transcript, then the local model sums it up
     if stem(&n, &["resum", "summar"]) {
-        return Some(empty(vec![blank(
+        let mut pl = empty(vec![blank(
             Action::OpenLatestTranscript,
-            tr("Open the transcript of the latest recording").to_string(),
-            tr("summaries need the KalangoOS agent, which is not connected here yet; the text opens in your editor").to_string(),
-        )]));
+            tr("Summarize the recording").to_string(),
+            tr("transcribed first with the voice model if it has no transcript; the local model writes the summary, saved beside the audio").to_string(),
+        )]);
+        // (the recording, when the request names it between quotes)
+        pl.name = quoted(text).unwrap_or_default();
+        return Some(pl);
     }
     let template = pick_template(&n);
     // "transcreva a última gravação": transcribe what is already recorded
@@ -483,19 +502,22 @@ fn execute(ui: &Rc<Ui>, p: &Plan) -> (Option<usize>, String) {
         return (None, trf("{n} session(s) stopped.", &[("n", n.to_string())]));
     }
     if on(&|a| *a == Action::OpenLatestTranscript) {
-        let t = {
+        // the recording named in the request (“summarize the recording “X””), else the latest one
+        let target = {
             let mut c = ui.core.borrow_mut();
             if c.rec_scanned.is_none() {
                 c.scan_recordings();
             }
-            c.recs.iter().max_by_key(|r| r.modified).and_then(|r| r.transcript())
+            let q = p.name.trim().to_lowercase();
+            let named = (!q.is_empty()).then(|| c.recs.iter().find(|r| r.name.to_lowercase().contains(&q)).map(|r| r.path.clone())).flatten();
+            named.or_else(|| c.recs.iter().max_by_key(|r| r.modified).map(|r| r.path.clone()))
         };
-        return match t {
+        return match target {
             Some(path) => {
-                let _ = gtk::gio::AppInfo::launch_default_for_uri(&gtk::gio::File::for_path(&path).uri(), None::<&gtk::gio::AppLaunchContext>);
-                (None, trf("Opened {file}.", &[("file", path.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default())]))
+                super::gravacoes::summarize(ui, &path);
+                (None, trf("Summarizing {file}; the progress shows in Recordings.", &[("file", path.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default())]))
             }
-            None => (None, tr("The latest recording has no transcript yet.").to_string()),
+            None => (None, tr("There are no recordings yet.").to_string()),
         };
     }
     if on(&|a| *a == Action::TranscribeLatest) {
@@ -1060,6 +1082,14 @@ mod tests {
         assert_eq!(pl.template.as_deref(), Some("Record the computer"));
         assert_eq!(actions(&pl).last(), Some(&Action::Transcribe(false)));
         assert!(transcribe_script().is_some(), "the built-in script that transcribes is there");
+    }
+
+    #[test]
+    fn a_summary_request_names_its_recording() {
+        assert_eq!(quoted("resuma a gravação “Reunião semanal”").as_deref(), Some("Reunião semanal"));
+        assert_eq!(quoted("summarize \"Kalango Cast\" please").as_deref(), Some("Kalango Cast"));
+        assert_eq!(quoted("resuma a última"), None);
+        assert_eq!(p("resuma a gravação “Reunião semanal”").unwrap().name, "Reunião semanal");
     }
 
     #[test]

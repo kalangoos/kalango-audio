@@ -637,7 +637,8 @@ fn more_menu(ui: &Rc<Ui>, page: &Rc<Page>, path: &Path) -> gtk::MenuButton {
     pop.add_css_class("ka-grav-menu");
     let items = vbox(2, "");
     let fav = ui.core.borrow().is_favourite(path);
-    let entries: [(&str, &str, u8); 5] = [
+    let entries: [(&str, &str, u8); 6] = [
+        ("spark", tr("Summarize"), 5),
         ("pasta", tr("Show in Files"), 0),
         ("ajustes", tr("Open in editor"), 1),
         ("lapis", tr("Rename…"), 2),
@@ -661,6 +662,10 @@ fn more_menu(ui: &Rc<Ui>, page: &Rc<Page>, path: &Path) -> gtk::MenuButton {
                 3 => {
                     u.core.borrow_mut().toggle_favourite(&path);
                     u.changed(Change::Store);
+                }
+                5 => {
+                    select(&u, &pg, &path);
+                    summarize(&u, &path);
                 }
                 _ => trash(&u, &pg, &path),
             }
@@ -1208,6 +1213,13 @@ fn refresh_detail(ui: &Rc<Ui>, page: &Rc<Page>) {
     tags_box.append(&add);
     top.append(&tags_box);
 
+    // the summary (or the job making it)
+    let slot = vbox(0, "ka-grav-resumo-vaga");
+    slot.set_margin_top(20);
+    fill_slot(ui, page, &slot, &r.path, dur);
+    SLOT.with(|s| *s.borrow_mut() = Some((r.path.clone(), slot.downgrade(), Rc::downgrade(page))));
+    top.append(&slot);
+
     // the transcript
     let text = page.transcript_text(&r);
     let lines = text.as_deref().map(parse_transcript).unwrap_or_default();
@@ -1254,6 +1266,24 @@ fn refresh_detail(ui: &Rc<Ui>, page: &Rc<Page>) {
     let tsc = scroller(&tlist);
     tsc.set_vexpand(true);
     tsc.set_min_content_height(120);
+    // with a summary above, the transcript folds into one line that opens it (design "resumo pronto")
+    if slot.is_visible() && !lines.is_empty() {
+        thead.set_visible(false);
+        tsc.set_visible(false);
+        let fold = gtk::Button::new();
+        fold.add_css_class("ka-link-botao");
+        fold.add_css_class("fraco");
+        fold.set_halign(Align::Start);
+        fold.set_margin_top(12);
+        fold.set_child(Some(&caps(&trf("Transcript · {n} lines ›", &[("n", lines.len().to_string())]))));
+        let (th, ts) = (thead.clone(), tsc.clone());
+        fold.connect_clicked(move |b| {
+            th.set_visible(true);
+            ts.set_visible(true);
+            b.set_visible(false);
+        });
+        page.side.append(&fold);
+    }
     page.side.append(&tsc);
 
     let div = hbox(0, "ka-linha-div");
@@ -1264,6 +1294,7 @@ fn refresh_detail(ui: &Rc<Ui>, page: &Rc<Page>) {
     let copy = button(tr("Copy text"), "secundario", Some("copiar"));
     let srt = button(tr("Export .srt"), "secundario", Some("baixar"));
     let sum = button(tr("Summarize with the agent"), "fantasma", Some("spark"));
+    sum.set_sensitive(JOB.with(|j| j.borrow().is_none()));
     for b in [&copy, &srt] {
         b.set_sensitive(!lines.is_empty());
     }
@@ -1390,8 +1421,8 @@ fn refresh_detail(ui: &Rc<Ui>, page: &Rc<Page>) {
         });
     }
     {
-        let (u, name) = (ui.clone(), display_name(&stem));
-        sum.connect_clicked(move |_| super::agente::ask(&u, &trf("summarize the recording “{name}”", &[("name", name.clone())])));
+        let (u, path) = (ui.clone(), r.path.clone());
+        sum.connect_clicked(move |_| summarize(&u, &path));
     }
     {
         let path = r.path.clone();
@@ -1494,6 +1525,245 @@ fn rescan(ui: &Rc<Ui>, page: &Rc<Page>, animate: bool) {
     refresh_list(ui, page, animate);
     refresh_detail(ui, page);
     arrange(ui, page);
+}
+
+// ---------------------------------------------------------------- summaries (transcribe first when needed)
+
+/// The summary being made (one at a time): its recording, how it goes, and how to stop it.
+struct Job {
+    path: PathBuf,
+    progress: Option<crate::voz::Progress>,
+    cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// minutes of sound, for "19 of 48 min"
+    minutes: f64,
+}
+
+thread_local! {
+    static JOB: RefCell<Option<Job>> = const { RefCell::new(None) };
+    /// the summary slot of the open detail (refilled while the job goes)
+    static SLOT: RefCell<Option<(PathBuf, glib::WeakRef<gtk::Box>, std::rc::Weak<Page>)>> = const { RefCell::new(None) };
+    /// a recording to open when the page shows (the agent asked for its summary)
+    static PENDING: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
+}
+
+/// Summarizes a recording: transcribes it first when it has no transcript, then asks the local model for the
+/// summary; the detail shows the progress and then the summary. Also used by the agent panel and the row menu.
+pub fn summarize(ui: &Rc<Ui>, path: &Path) {
+    if JOB.with(|j| j.borrow().is_some()) {
+        ui.toast(tr("Another summary is being made; wait for it to finish."), None);
+        return;
+    }
+    if ui.page() != "gravacoes" {
+        PENDING.with(|p| *p.borrow_mut() = Some(path.to_path_buf()));
+        ui.go("gravacoes");
+    }
+    let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let minutes = ui.core.borrow().recs.iter().find(|r| r.path == path).and_then(|r| r.dur).or_else(|| crate::media::duration(path)).unwrap_or(0.0) / 60.0;
+    JOB.with(|j| *j.borrow_mut() = Some(Job { path: path.to_path_buf(), progress: Some(crate::voz::Progress::Summarizing), cancel: cancel.clone(), minutes }));
+    let has_transcript = crate::voz::transcript_path(path).is_file();
+    if !has_transcript {
+        JOB.with(|j| if let Some(j) = j.borrow_mut().as_mut() { j.progress = Some(crate::voz::Progress::Transcribing(0.0, String::new())) });
+    }
+    let (tx, rx) = std::sync::mpsc::channel::<Result<crate::voz::Progress, Result<crate::voz::Summary, String>>>();
+    let p2 = path.to_path_buf();
+    std::thread::spawn(move || {
+        let tx2 = tx.clone();
+        let r = crate::voz::summarize_recording(&p2, &cancel, move |p| {
+            let _ = tx2.send(Ok(p));
+        });
+        let _ = tx.send(Err(r.map_err(|e| e.message())));
+    });
+    refill_slot(ui);
+    let u = ui.clone();
+    glib::timeout_add_local(std::time::Duration::from_millis(120), move || {
+        let mut finished = None;
+        while let Ok(m) = rx.try_recv() {
+            match m {
+                Ok(p) => JOB.with(|j| if let Some(j) = j.borrow_mut().as_mut() { j.progress = Some(p) }),
+                Err(r) => finished = Some(r),
+            }
+        }
+        match finished {
+            None => {
+                refill_slot(&u);
+                glib::ControlFlow::Continue
+            }
+            Some(r) => {
+                JOB.with(|j| j.borrow_mut().take());
+                match r {
+                    Ok(_) => u.toast(tr("Summary ready; it is saved beside the recording."), None),
+                    Err(e) => u.toast(&e, None),
+                }
+                u.core.borrow_mut().rec_scanned = None;
+                u.changed(Change::Recordings);
+                refill_slot(&u);
+                glib::ControlFlow::Break
+            }
+        }
+    });
+}
+
+/// The progress card (design "Gravações · resumir (transcrevendo)").
+fn progress_card(job: &Job) -> gtk::Box {
+    let card = vbox(12, "ka-grav-resumir");
+    let head = hbox(12, "");
+    head.append(&tile("spark", "accent", 32));
+    let ht = vbox(2, "");
+    ht.append(&label(tr("Summarizing with the agent"), "ka-titulo3"));
+    ht.append(&label(tr("All on this computer · nothing leaves it"), "ka-fraco2"));
+    head.append(&ht);
+    card.append(&head);
+    let (transcribing, frac, last) = match &job.progress {
+        Some(crate::voz::Progress::Transcribing(f, l)) => (true, *f, l.clone()),
+        _ => (false, 1.0, String::new()),
+    };
+    let step = |n: &str, title: String, sub: String, active: bool| {
+        let s = hbox(10, "ka-grav-passo");
+        let num = label(n, if active { "ka-grav-passo-n ativo" } else { "ka-grav-passo-n" });
+        num.set_valign(Align::Start);
+        num.set_xalign(0.5);
+        s.append(&num);
+        let body = vbox(4, "");
+        body.set_hexpand(true);
+        body.append(&label(&title, if active { "ka-texto" } else { "ka-texto ka-fraco" }));
+        body.append(&para(&sub, "ka-fraco2"));
+        s.append(&body);
+        (s, body)
+    };
+    if transcribing || crate::voz::transcript_path(&job.path).with_extension("txt.parcial").is_file() || frac < 1.0 {
+        let pct = (frac * 100.0).round() as u32;
+        let done_min = (job.minutes * frac as f64).round() as u32;
+        let (s1, body) = step(
+            "1",
+            if transcribing { trf("Transcribing… {pct}%", &[("pct", pct.to_string())]) } else { tr("Transcribed").to_string() },
+            trf("There was no transcript yet · {done} of {total} min", &[("done", done_min.to_string()), ("total", (job.minutes.ceil() as u32).max(1).to_string())]),
+            transcribing,
+        );
+        let bar = gtk::ProgressBar::new();
+        bar.add_css_class("ka-grav-barra");
+        bar.set_fraction(frac as f64);
+        body.append(&bar);
+        if !last.is_empty() {
+            body.append(&line(&last, "ka-fraco2"));
+        }
+        card.append(&s1);
+    }
+    let (s2, _) = step(
+        "2",
+        if transcribing { tr("Summarize with the local model").to_string() } else { tr("Summarizing…").to_string() },
+        if transcribing { tr("Starts when the transcription ends").to_string() } else { tr("The local model reads the transcript").to_string() },
+        !transcribing,
+    );
+    card.append(&s2);
+    let foot = hbox(10, "");
+    let cancel = button(tr("Cancel"), "fantasma", None);
+    let c = job.cancel.clone();
+    cancel.connect_clicked(move |b| {
+        c.store(true, std::sync::atomic::Ordering::Relaxed);
+        b.set_sensitive(false);
+    });
+    cancel.set_sensitive(transcribing);
+    foot.append(&cancel);
+    foot.append(&label(tr("What was transcribed so far stays saved."), "ka-fraco2"));
+    card.append(&foot);
+    card
+}
+
+/// The summary card (design "Gravações · resumo pronto"): points, moments that seek, copy / open / redo.
+fn summary_card(ui: &Rc<Ui>, page: &Rc<Page>, path: &Path, s: &crate::voz::Summary, dur: f64) -> gtk::Box {
+    let card = vbox(10, "ka-grav-resumo");
+    let head = hbox(8, "");
+    head.append(&caps(tr("Summary")));
+    head.append(&spacer());
+    let file = crate::voz::summary_path(path);
+    head.append(&line(&file.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default(), "ka-fraco2 ka-grav-resumo-arquivo"));
+    card.append(&head);
+    let pts = vbox(8, "");
+    for p in &s.points {
+        let r = hbox(10, "");
+        let d = dot("accent");
+        d.set_valign(Align::Start);
+        d.set_margin_top(5);
+        r.append(&d);
+        r.append(&para(p, "ka-texto"));
+        pts.append(&r);
+    }
+    card.append(&pts);
+    if !s.moments.is_empty() {
+        let mc = caps(tr("Moments"));
+        mc.set_margin_top(4);
+        card.append(&mc);
+        let ms = vbox(2, "");
+        for (t, title, quote) in &s.moments {
+            let b = gtk::Button::new();
+            b.add_css_class("ka-grav-momento");
+            let r = hbox(12, "");
+            let tm = label(&fmt_stamp(*t), "ka-link ka-tnum");
+            tm.set_size_request(40, -1);
+            r.append(&tm);
+            r.append(&label(title, "ka-texto"));
+            let q = line(&format!("“{quote}”"), "ka-fraco2");
+            r.append(&q);
+            b.set_child(Some(&r));
+            let (pg, path, at) = (page.clone(), path.to_path_buf(), *t);
+            b.connect_clicked(move |_| pg.seek(&path, at, dur));
+            ms.append(&b);
+        }
+        card.append(&ms);
+    }
+    let acts = hbox(6, "");
+    let copy = button(tr("Copy summary"), "secundario", Some("copiar"));
+    let open = button(tr("Open .md"), "fantasma", Some("doc"));
+    let again = button(tr("Summarize again"), "fantasma", Some("spark"));
+    {
+        let (u, f) = (ui.clone(), file.clone());
+        copy.connect_clicked(move |_| {
+            if let (Ok(t), Some(d)) = (std::fs::read_to_string(&f), gdk::Display::default()) {
+                d.clipboard().set_text(&t);
+                u.toast(tr("Summary copied."), None);
+            }
+        });
+        let f = file.clone();
+        open.connect_clicked(move |_| {
+            let _ = gtk::gio::AppInfo::launch_default_for_uri(&gtk::gio::File::for_path(&f).uri(), None::<&gtk::gio::AppLaunchContext>);
+        });
+        let (u, p, f) = (ui.clone(), path.to_path_buf(), file.clone());
+        again.connect_clicked(move |_| {
+            let _ = std::fs::remove_file(&f);
+            summarize(&u, &p);
+        });
+    }
+    acts.append(&copy);
+    acts.append(&open);
+    acts.append(&again);
+    card.append(&acts);
+    card
+}
+
+/// Fills the open detail's summary slot: the job's progress, the saved summary, or nothing.
+fn fill_slot(ui: &Rc<Ui>, page: &Rc<Page>, slot: &gtk::Box, path: &Path, dur: f64) {
+    clear(slot);
+    let running = JOB.with(|j| j.borrow().as_ref().filter(|j| j.path == path).map(progress_card));
+    if let Some(card) = running {
+        slot.append(&card);
+        slot.set_visible(true);
+        return;
+    }
+    match crate::voz::fresh_summary(path) {
+        Some(s) => {
+            slot.append(&summary_card(ui, page, path, &s, dur));
+            slot.set_visible(true);
+        }
+        None => slot.set_visible(false),
+    }
+}
+
+fn refill_slot(ui: &Rc<Ui>) {
+    let s = SLOT.with(|s| s.borrow().as_ref().map(|(p, w, pg)| (p.clone(), w.upgrade(), pg.upgrade())));
+    if let Some((path, Some(slot), Some(page))) = s {
+        let dur = ui.core.borrow().recs.iter().find(|r| r.path == path).and_then(|r| r.dur).unwrap_or(0.0);
+        fill_slot(ui, &page, &slot, &path, dur);
+    }
 }
 
 pub fn page(ui: &Rc<Ui>) -> gtk::Widget {
@@ -1614,6 +1884,9 @@ pub fn page(ui: &Rc<Ui>) -> gtk::Widget {
         ui.on_page(move |ui, name| {
             if name == "gravacoes" {
                 rescan(ui, &p, true);
+                if let Some(path) = PENDING.with(|x| x.borrow_mut().take()) {
+                    select(ui, &p, &path);
+                }
             }
         });
     }

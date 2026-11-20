@@ -237,10 +237,26 @@ pub fn resample(x: &[f32], from: u32, to: u32) -> Vec<f32> {
 
 /// Transcribes samples in slices, appending "[mm:ss] text" lines to `out` as each slice is done; `offset` is the
 /// time of the first sample. Stops at the first "not installed" (no use asking again).
-pub fn transcribe_slices(samples: &[f32], offset: f64, out: &Path, tmp: &Path, mut on_line: impl FnMut(&str)) -> Result<usize, VoiceError> {
+pub fn transcribe_slices(samples: &[f32], offset: f64, out: &Path, tmp: &Path, on_line: impl FnMut(&str)) -> Result<usize, VoiceError> {
+    transcribe_slices_with(samples, offset, out, tmp, on_line, |_, _| true)
+}
+
+/// As [`transcribe_slices`], telling `on_slice(done, total)` before each slice; it returns false to stop (cancel).
+pub fn transcribe_slices_with(
+    samples: &[f32],
+    offset: f64,
+    out: &Path,
+    tmp: &Path,
+    mut on_line: impl FnMut(&str),
+    mut on_slice: impl FnMut(usize, usize) -> bool,
+) -> Result<usize, VoiceError> {
     let per = SLICE_SECONDS * RATE as usize;
+    let total = samples.len().div_ceil(per);
     let mut lines = 0;
     for (i, slice) in samples.chunks(per).enumerate() {
+        if !on_slice(i, total) {
+            break;
+        }
         if !has_sound(slice) {
             continue;
         }
@@ -282,6 +298,236 @@ pub fn transcribe_recording(path: &str) -> Result<PathBuf, String> {
     Ok(txt)
 }
 
+// ---------------- summaries ----------------
+
+/// The summary of a recording: short points and the moments worth going back to.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Summary {
+    pub points: Vec<String>,
+    /// (seconds, title, words quoted from that moment)
+    pub moments: Vec<(f64, String, String)>,
+}
+
+/// Where a recording's summary goes: `<recording stem>.resumo.md` beside it.
+pub fn summary_path(recording: &Path) -> PathBuf {
+    let stem = recording.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    recording.with_file_name(format!("{stem}.resumo.md"))
+}
+
+/// Where a recording's transcript is (or goes): `<recording stem>.txt` (or an older `<recording>.txt`).
+pub fn transcript_path(recording: &Path) -> PathBuf {
+    let a = PathBuf::from(format!("{}.txt", recording.display()));
+    if a.is_file() {
+        a
+    } else {
+        recording.with_extension("txt")
+    }
+}
+
+/// An existing summary that is still up to date (newer than the recording and its transcript).
+pub fn fresh_summary(recording: &Path) -> Option<Summary> {
+    let s = summary_path(recording);
+    let age = |p: &Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
+    let sm = age(&s)?;
+    if age(recording).is_some_and(|r| r > sm) || age(&transcript_path(recording)).is_some_and(|t| t > sm) {
+        return None;
+    }
+    Some(parse_summary(&std::fs::read_to_string(s).ok()?))
+}
+
+/// Seconds from "mm:ss" / "h:mm:ss".
+pub fn parse_stamp(s: &str) -> Option<f64> {
+    let parts: Vec<f64> = s.trim().split(':').map(|p| p.trim().parse::<f64>()).collect::<Result<_, _>>().ok()?;
+    match parts.as_slice() {
+        [m, s] => Some(m * 60.0 + s),
+        [h, m, s] => Some(h * 3600.0 + m * 60.0 + s),
+        _ => None,
+    }
+}
+
+/// The transcript's lines as (seconds, text) ("[mm:ss] text"; untimed lines join the one before).
+pub fn transcript_lines(text: &str) -> Vec<(f64, String)> {
+    let mut v: Vec<(f64, String)> = vec![];
+    for l in text.lines().map(str::trim).filter(|l| !l.is_empty()) {
+        if let Some(rest) = l.strip_prefix('[') {
+            if let Some((stamp, body)) = rest.split_once(']') {
+                if let Some(t) = parse_stamp(stamp.split("-->").next().unwrap_or("")) {
+                    v.push((t, body.trim().to_string()));
+                    continue;
+                }
+            }
+        }
+        match v.last_mut() {
+            Some(last) => {
+                last.1.push(' ');
+                last.1.push_str(l);
+            }
+            None => v.push((0.0, l.to_string())),
+        }
+    }
+    v
+}
+
+/// The summary as Markdown (the file the person can open anywhere).
+pub fn summary_markdown(name: &str, s: &Summary) -> String {
+    let mut md = format!("# {}\n\n", crate::i18n::trf("Summary — {name}", &[("name", name.to_string())]));
+    for p in &s.points {
+        md.push_str(&format!("- {p}\n"));
+    }
+    if !s.moments.is_empty() {
+        md.push_str(&format!("\n## {}\n\n", tr("Moments")));
+        for (t, title, quote) in &s.moments {
+            let stamp = line(*t, "");
+            let stamp = stamp.trim();
+            md.push_str(&format!("- {stamp} {title} — “{quote}”\n"));
+        }
+    }
+    md
+}
+
+/// Reads a summary written by [`summary_markdown`] (points: "- " lines before the moments heading; moments:
+/// "- [mm:ss] title — “quote”").
+pub fn parse_summary(md: &str) -> Summary {
+    let mut s = Summary::default();
+    let mut in_moments = false;
+    for l in md.lines() {
+        let l = l.trim();
+        if l.starts_with("## ") {
+            in_moments = true;
+            continue;
+        }
+        let Some(item) = l.strip_prefix("- ") else { continue };
+        if !in_moments {
+            s.points.push(item.to_string());
+            continue;
+        }
+        let Some(rest) = item.strip_prefix('[') else { continue };
+        let Some((stamp, body)) = rest.split_once(']') else { continue };
+        let Some(t) = parse_stamp(stamp) else { continue };
+        let (title, quote) = body.split_once(" — ").unwrap_or((body, ""));
+        s.moments.push((t, title.trim().to_string(), quote.trim().trim_matches(['“', '”', '"']).to_string()));
+    }
+    s
+}
+
+/// The request for the agent's `documento-resumo`: the transcript in timed "pages" (each line one page).
+pub fn summary_request(name: &str, lines: &[(f64, String)]) -> serde_json::Value {
+    serde_json::json!({
+        "nome": name,
+        "paginas": lines.iter().enumerate().map(|(i, (t, x))| serde_json::json!({"n": i + 1, "texto": format!("[{}] {x}", line(*t, "").trim().trim_start_matches('[').trim_end_matches(']'))})).collect::<Vec<_>>(),
+    })
+}
+
+/// The agent's answer (`{"resumo": [...], "trechos": [{"titulo", "pagina", "citacao"}], ...}`) as a summary, the
+/// pages mapped back to the times of the transcript's lines.
+pub fn summary_from_answer(v: &serde_json::Value, lines: &[(f64, String)]) -> Summary {
+    let points = v["resumo"].as_array().into_iter().flatten().filter_map(|x| x.as_str()).map(drop_page_refs).filter(|x| !x.is_empty()).collect();
+    let mut moments: Vec<(f64, String, String)> = v["trechos"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|m| {
+            let page = m["pagina"].as_u64()? as usize;
+            let t = lines.get(page.checked_sub(1)?)?.0;
+            Some((t, m["titulo"].as_str()?.trim().to_string(), m["citacao"].as_str().unwrap_or("").trim().to_string()))
+        })
+        .collect();
+    // in the order they happen
+    moments.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    moments.dedup_by(|a, b| a.0 == b.0 && a.1 == b.1);
+    Summary { points, moments }
+}
+
+/// The model reads the transcript as "pages" (one per line): "(página 2)" / "(page 2)" in its points means nothing
+/// to the person, so it goes.
+pub fn drop_page_refs(s: &str) -> String {
+    let mut out = s.trim().to_string();
+    for w in ["página", "pagina", "page", "páginas", "pages"] {
+        while let Some(i) = out.to_lowercase().find(&format!("({w} ")) {
+            match out[i..].find(')') {
+                Some(j) => out.replace_range(i..i + j + 1, ""),
+                None => break,
+            }
+        }
+    }
+    out.replace(" .", ".").replace(" ,", ",").split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// How a summary job is going (sent to the window while it works).
+#[derive(Debug, Clone, PartialEq)]
+pub enum Progress {
+    /// transcribing first: the fraction done and the last line heard
+    Transcribing(f32, String),
+    Summarizing,
+}
+
+/// The whole job, blocking (off the window's thread): transcribe if there is no transcript yet (saved as
+/// `<recording>.txt`), then summarize with the local text model and save `<recording>.resumo.md`. `cancel` stops it
+/// between slices (what was transcribed stays saved).
+pub fn summarize_recording(recording: &Path, cancel: &std::sync::atomic::AtomicBool, mut on: impl FnMut(Progress)) -> Result<Summary, VoiceError> {
+    use std::sync::atomic::Ordering;
+    let bin = agent_binary().ok_or(VoiceError::NotInstalled)?;
+    let name = recording.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    let tpath = transcript_path(recording);
+    let mut text = std::fs::read_to_string(&tpath).unwrap_or_default();
+    if text.trim().is_empty() {
+        let samples = read_mono(recording).map_err(VoiceError::Other)?;
+        let part = tpath.with_extension("txt.parcial");
+        let _ = std::fs::remove_file(&part);
+        let tmp = std::env::temp_dir().join(format!("kalango-audio-resumo-{}-{}.wav", std::process::id(), crate::model::new_uid()));
+        let last = std::cell::RefCell::new(String::new());
+        let done = std::cell::Cell::new(0.0f32);
+        let on = std::cell::RefCell::new(&mut on);
+        transcribe_slices_with(
+            &samples,
+            0.0,
+            &part,
+            &tmp,
+            |l| {
+                *last.borrow_mut() = l.to_string();
+                (on.borrow_mut())(Progress::Transcribing(done.get(), l.to_string()));
+            },
+            |i, n| {
+                done.set(i as f32 / n.max(1) as f32);
+                (on.borrow_mut())(Progress::Transcribing(done.get(), last.borrow().clone()));
+                !cancel.load(Ordering::Relaxed)
+            },
+        )?;
+        // the transcript is only "there" once whole (a cancelled one keeps its part beside, for the person)
+        if cancel.load(Ordering::Relaxed) {
+            return Err(VoiceError::Other(tr("Cancelled; what was transcribed is saved beside the recording.").to_string()));
+        }
+        let _ = std::fs::rename(&part, &tpath);
+        text = std::fs::read_to_string(&tpath).unwrap_or_default();
+        if text.trim().is_empty() {
+            return Err(VoiceError::Other(tr("There is no speech in this recording.").to_string()));
+        }
+    }
+    on(Progress::Summarizing);
+    let lines = transcript_lines(&text);
+    let mut child = std::process::Command::new(bin)
+        .args(["--json", "documento-resumo"])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| VoiceError::Other(e.to_string()))?;
+    if let Some(mut si) = child.stdin.take() {
+        let _ = si.write_all(summary_request(&name, &lines).to_string().as_bytes());
+    }
+    let o = child.wait_with_output().map_err(|e| VoiceError::Other(e.to_string()))?;
+    let out = String::from_utf8_lossy(&o.stdout);
+    let line_json = out.lines().rev().find(|l| l.trim_start().starts_with('{')).unwrap_or("");
+    let v: serde_json::Value = serde_json::from_str(line_json).unwrap_or(serde_json::Value::Null);
+    if v["tipo"].as_str() == Some("erro") || v["resumo"].is_null() {
+        let why = v["texto"].as_str().map(str::to_string).unwrap_or_else(|| String::from_utf8_lossy(&o.stderr).trim().lines().last().unwrap_or("").to_string());
+        return Err(if why.contains("LFM3") && why.contains("model") || why.contains("modelo local") { VoiceError::NotInstalled } else { VoiceError::Other(if why.is_empty() { tr("the local model did not answer").to_string() } else { why }) });
+    }
+    let s = summary_from_answer(&v, &lines);
+    std::fs::write(summary_path(recording), summary_markdown(&name, &s)).map_err(|e| VoiceError::Other(e.to_string()))?;
+    Ok(s)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -309,6 +555,33 @@ mod tests {
         if !Path::new("/usr/libexec/kalango-agente").is_file() {
             assert_eq!(agent_binary_in(Some(empty.join("nope")), Some(empty.into_os_string())), None);
         }
+    }
+
+    #[test]
+    fn summaries_go_to_markdown_and_back() {
+        let s = Summary {
+            points: vec!["Fechada a pauta de sexta.".into(), "Orçamento revisado.".into()],
+            moments: vec![(12.0, "Abertura".into(), "Vamos começar pela pauta".into()), (1004.0, "Pauta fechada".into(), "três pontos".into())],
+        };
+        let md = summary_markdown("Reunião", &s);
+        assert!(md.contains("- [16:44] Pauta fechada — “três pontos”"), "{md}");
+        assert_eq!(parse_summary(&md), s);
+        assert_eq!(summary_path(Path::new("/x/Reunião 1.wav")), PathBuf::from("/x/Reunião 1.resumo.md"));
+    }
+
+    #[test]
+    fn transcript_lines_and_the_agent_answer_map_to_times() {
+        let lines = transcript_lines("[00:00] Bom dia.\ncontinua\n[00:15] Segunda parte.\n[1:00:00] Fim.");
+        assert_eq!(lines, vec![(0.0, "Bom dia. continua".into()), (15.0, "Segunda parte.".into()), (3600.0, "Fim.".into())]);
+        let req = summary_request("R", &lines);
+        assert_eq!(req["paginas"][1]["n"], 2);
+        assert!(req["paginas"][1]["texto"].as_str().unwrap().starts_with("[00:15]"));
+        assert_eq!(drop_page_refs("Fechada a pauta (página 1)."), "Fechada a pauta.");
+        assert_eq!(drop_page_refs("Next week (page 2), as said"), "Next week, as said");
+        let v = serde_json::json!({"resumo": ["a", " "], "trechos": [{"titulo": "T", "pagina": 2, "citacao": "q"}, {"titulo": "fora", "pagina": 9, "citacao": ""}]});
+        let s = summary_from_answer(&v, &lines);
+        assert_eq!(s.points, vec!["a".to_string()]);
+        assert_eq!(s.moments, vec![(15.0, "T".to_string(), "q".to_string())]);
     }
 
     #[test]
@@ -344,5 +617,31 @@ mod tests {
         assert!(n >= 1, "{got:?}");
         assert!(got[0].starts_with("[00:00] "), "{got:?}");
         assert_eq!(std::fs::read_to_string(&out).unwrap().lines().count(), n);
+    }
+
+    /// The whole "summarize" job with the real models (transcription first, then the summary), on a generated speech
+    /// file copied to the test folder; skipped without KALANGO_AUDIO_FALA_TESTE or the agent.
+    #[test]
+    fn summarizes_a_recording_without_transcript_with_the_system_models() {
+        let Some(wav) = std::env::var_os("KALANGO_AUDIO_FALA_TESTE").map(PathBuf::from).filter(|p| p.is_file()) else { return };
+        if agent_binary().is_none() {
+            return;
+        }
+        let d = crate::engine::test_home().join("resumo");
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        let rec = d.join("Reunião de teste.wav");
+        std::fs::copy(&wav, &rec).unwrap();
+        let cancel = std::sync::atomic::AtomicBool::new(false);
+        let mut seen = vec![];
+        let s = summarize_recording(&rec, &cancel, |p| seen.push(p)).expect("summary");
+        assert!(seen.iter().any(|p| matches!(p, Progress::Transcribing(..))), "it transcribed first");
+        assert_eq!(seen.last(), Some(&Progress::Summarizing));
+        assert!(rec.with_extension("txt").is_file(), "the transcript was saved");
+        assert!(!s.points.is_empty(), "{s:?}");
+        let md = std::fs::read_to_string(summary_path(&rec)).unwrap();
+        eprintln!("{md}");
+        assert_eq!(parse_summary(&md).points, s.points);
+        assert!(fresh_summary(&rec).is_some(), "the saved summary is up to date");
     }
 }
