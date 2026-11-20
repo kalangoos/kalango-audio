@@ -95,6 +95,7 @@ pub fn demo_core() -> Core {
         }
     }
     let mut c = Core::ephemeral(sessions);
+    c.watch_apps();
     c.store.prefs.default_folder = folder;
     c.store.prefs.welcomed = true;
     if let Some(first) = c.recs.first().map(|r| r.path.clone()) {

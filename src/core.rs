@@ -176,15 +176,21 @@ impl Core {
         let sessions = load_sessions();
         let store: Store = std::fs::read_to_string(store_path()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
         let mut c = Core::with(sessions, store, true);
-        let (a, w) = (c.apps.clone(), c.want_apps.clone());
+        c.watch_apps();
+        c.devices = audio::list_devices();
+        c
+    }
+
+    /// Keeps `apps` (the programs playing sound) fresh in a helper thread while `want_apps` is set.
+    pub fn watch_apps(&self) {
+        let (a, w) = (self.apps.clone(), self.want_apps.clone());
         std::thread::spawn(move || loop {
             if w.load(Ordering::Relaxed) {
-                *a.lock().unwrap() = audio::list_apps();
+                let now = audio::list_apps();
+                *a.lock().unwrap() = now;
             }
             std::thread::sleep(std::time::Duration::from_secs(2));
         });
-        c.devices = audio::list_devices();
-        c
     }
 
     /// An app that keeps nothing on disk (tests, screenshots).

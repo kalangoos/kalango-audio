@@ -34,6 +34,9 @@ thread_local! {
     static TOKENS: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
     static LISTENERS: RefCell<Vec<Box<dyn Fn()>>> = const { RefCell::new(Vec::new()) };
     static MONITOR: RefCell<Option<gio::FileMonitor>> = const { RefCell::new(None) };
+    static GSETTINGS: RefCell<Option<gio::Settings>> = const { RefCell::new(None) };
+    /// GTK's dark preference before the app touched it
+    static START_DARK: Cell<bool> = const { Cell::new(true) };
 }
 
 fn parse_tokens(css: &str) -> HashMap<String, String> {
@@ -65,8 +68,7 @@ fn wanted() -> (bool, String) {
         let accent = v["destaque"].as_str().and_then(|d| ACCENTS.iter().find(|(id, _)| *id == d)).map(|(_, t)| t.to_string()).unwrap_or("k_accent".into());
         return (light, accent);
     }
-    let dark = gtk::Settings::default().map(|s| s.is_gtk_application_prefer_dark_theme()).unwrap_or(true);
-    (!dark, "k_accent".into())
+    (!system_dark(), "k_accent".into())
 }
 
 fn css(light: bool, accent: &str) -> String {
@@ -81,8 +83,32 @@ fn css(light: bool, accent: &str) -> String {
     s
 }
 
+/// Outside KalangoOS: the desktop's colour scheme (org.gnome.desktop.interface color-scheme), or GTK's dark
+/// preference as it was when the app started. Never the GTK setting as it is now: the app writes it itself (below),
+/// and reading it back made a loop.
+fn system_dark() -> bool {
+    if let Some(src) = gio::SettingsSchemaSource::default() {
+        if src.lookup("org.gnome.desktop.interface", true).is_some_and(|s| s.has_key("color-scheme")) {
+            let v = gio::Settings::new("org.gnome.desktop.interface").string("color-scheme");
+            return v != "prefer-light";
+        }
+    }
+    START_DARK.with(|d| d.get())
+}
+
+/// Whether applying a theme must touch GTK's dark preference: only when it really changes. Setting it (even to the
+/// same value) makes GTK parse its whole built-in theme again and restyle every widget — with a long list open that
+/// kept the main thread busy and froze the window.
+pub fn must_set_dark(current_dark: bool, light: bool) -> bool {
+    current_dark == light
+}
+
 fn apply(light: bool, accent: String) {
     let changed = LIGHT_NOW.with(|l| l.get()) != light || ACCENT.with(|a| *a.borrow() != accent);
+    // nothing new (the minute timer, a rewrite of tema.json with the same choice): leave everything as it is
+    if !changed && TOKENS.with(|t| !t.borrow().is_empty()) {
+        return;
+    }
     let mut tokens = parse_tokens(if light { LIGHT } else { DARK });
     if accent != "k_accent" {
         if let Some(c) = tokens.get(&accent).cloned() {
@@ -97,7 +123,9 @@ fn apply(light: bool, accent: String) {
         p.load_from_string(&css(light, &accent));
     }
     if let Some(s) = gtk::Settings::default() {
-        s.set_gtk_application_prefer_dark_theme(!light);
+        if must_set_dark(s.is_gtk_application_prefer_dark_theme(), light) {
+            s.set_gtk_application_prefer_dark_theme(!light);
+        }
     }
     if changed {
         let l = LISTENERS.with(|l| l.take());
@@ -119,6 +147,7 @@ pub fn start(display: &gdk::Display) {
     // above the person's own ~/.config/gtk-4.0/gtk.css (USER priority), as the KalangoOS apps do
     gtk::style_context_add_provider_for_display(display, &p, gtk::STYLE_PROVIDER_PRIORITY_USER + 1);
     PROVIDER.with(|x| *x.borrow_mut() = Some(p));
+    START_DARK.with(|d| d.set(gtk::Settings::default().map(|s| s.is_gtk_application_prefer_dark_theme()).unwrap_or(true)));
     LIGHT_NOW.with(|l| l.set(!wanted().0)); // forces the first apply to count as a change
     let (l, a) = wanted();
     apply(l, a);
@@ -131,11 +160,16 @@ pub fn start(display: &gdk::Display) {
         });
         MONITOR.with(|x| *x.borrow_mut() = Some(m));
     }
-    if let Some(s) = gtk::Settings::default() {
-        s.connect_gtk_application_prefer_dark_theme_notify(|_| {
-            let (l, a) = wanted();
-            apply(l, a);
-        });
+    // outside KalangoOS, the desktop's scheme (never our own GTK setting: we write it)
+    if let Some(src) = gio::SettingsSchemaSource::default() {
+        if src.lookup("org.gnome.desktop.interface", true).is_some_and(|s| s.has_key("color-scheme")) {
+            let gs = gio::Settings::new("org.gnome.desktop.interface");
+            gs.connect_changed(Some("color-scheme"), |_, _| {
+                let (l, a) = wanted();
+                apply(l, a);
+            });
+            GSETTINGS.with(|x| *x.borrow_mut() = Some(gs));
+        }
     }
     // "automático" changes at 7h and 19h
     glib::timeout_add_seconds_local(60, || {
@@ -193,6 +227,23 @@ pub fn source(cr: &gtk::cairo::Context, token: &str, alpha: f64) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gtk_dark_preference_is_only_written_when_it_changes() {
+        // (dark now, light wanted) → write; the same as now → leave it (writing makes GTK reload its theme)
+        assert!(must_set_dark(true, true));
+        assert!(must_set_dark(false, false));
+        assert!(!must_set_dark(true, false));
+        assert!(!must_set_dark(false, true));
+    }
+
+    #[test]
+    fn the_theme_never_listens_to_the_gtk_setting_it_writes() {
+        // listening to gtk-application-prefer-dark-theme while writing it made a feedback loop that froze the app
+        let src = include_str!("theme.rs");
+        let listen = ["connect_gtk_application", "_prefer_dark_theme_notify"].concat();
+        assert!(!src.contains(&listen));
+    }
 
     #[test]
     fn both_token_files_define_the_same_tokens() {
