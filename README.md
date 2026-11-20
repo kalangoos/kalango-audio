@@ -24,7 +24,8 @@ cargo test --release       # testes automáticos
 - **PipeWire** (ou outro servidor de som acessível pelo ALSA). Sem ele o app mostra o estado "sistema de som não respondeu".
 - `pw-record` e `pw-dump` (ferramentas do PipeWire): gravar só o som de um aplicativo.
 - `ffmpeg` (opcional, recomendado): MP3, AAC, ALAC e FLAC, etiquetas, transmissões (Icecast, RTMP) e o player das gravações.
-- `whisper-cli` e um modelo (opcional): o bloco Transcrever.
+- O modelo de voz do KalangoOS (LFM3-Audio-2B, pela Central de Apps) e o `kalango-agente`: o bloco Transcrever
+  e a transcrição das gravações. Sem ele, o bloco mostra que o modelo não está instalado.
 - `gio` e `xdg-open` (opcional): Lixeira, "Mostrar em Arquivos" e abrir no player.
 - Plug-ins LADSPA (opcional): aparecem no bloco "Plug-in LADSPA".
 

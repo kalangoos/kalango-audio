@@ -665,39 +665,31 @@ pub fn rtmp_quality(level: i32) -> (u32, u32) {
     match level { 0 => (1000, 128), 2 => (6000, 192), _ => (3000, 160) }
 }
 
-/// Transcribe: every 10 s of audio goes through whisper.cpp (`whisper-cli`) and the text is appended to a file.
+/// Transcribe: the sound goes, in slices of [`crate::voz::SLICE_SECONDS`], to KalangoOS's local voice model; each
+/// slice becomes a "[mm:ss] text" line appended to the transcript as soon as it is ready (so it grows live).
 fn transcribe_worker(rx: std::sync::mpsc::Receiver<Vec<Frame>>, p: crate::model::Params, session: String, note: Arc<Mutex<String>>) {
     let dir = expand_home(&p.text("folder", &default_transcripts_dir()));
     let _ = std::fs::create_dir_all(&dir);
     let name = expand_tokens(&p.text("file_name", DEFAULT_TRANSCRIPT_NAME), &session, 1);
     let path = unique_path(&dir, &name, "txt");
-    let tmp = std::env::temp_dir().join(format!("kalango-audio-transcribe-{}.wav", std::process::id()));
+    let tmp = std::env::temp_dir().join(format!("kalango-audio-transcribe-{}-{}.wav", std::process::id(), crate::model::new_uid()));
+    let per = crate::voz::SLICE_SECONDS * SR as usize;
     let mut acc: Vec<Frame> = vec![];
+    let mut offset = 0.0f64;
     while let Ok(chunk) = rx.recv() {
         acc.extend(chunk);
-        if acc.len() < 480_000 { continue; }
-        // whisper wants 16 kHz mono
-        let mono: Vec<f32> = acc.chunks(3).map(|c| 0.5 * (c[0][0] + c[0][1])).collect();
+        if acc.len() < per { continue; }
+        let mono: Vec<f32> = acc.iter().map(|f| 0.5 * (f[0] + f[1])).collect();
         acc.clear();
-        let spec = hound::WavSpec { channels: 1, sample_rate: 16000, bits_per_sample: 16, sample_format: hound::SampleFormat::Int };
-        if let Ok(mut w) = hound::WavWriter::create(&tmp, spec) {
-            for x in &mono { let _ = w.write_sample((x.clamp(-1.0, 1.0) * 32767.0) as i16); }
-            let _ = w.finalize();
+        let slice = crate::voz::resample(&mono, SR as u32, crate::voz::RATE);
+        match crate::voz::transcribe_slices(&slice, offset, &path, &tmp, |l| *note.lock().unwrap() = l.chars().rev().take(80).collect::<Vec<_>>().into_iter().rev().collect()) {
+            Ok(_) => {}
+            Err(crate::voz::VoiceError::NotInstalled) => { *note.lock().unwrap() = format!("error: {}", crate::voz::VoiceError::NotInstalled.message()); break; }
+            Err(e) => { *note.lock().unwrap() = format!("error: {}", e.message()); }
         }
-        let out = std::process::Command::new(p.text("command", "whisper-cli"))
-            .args(["-m", &expand_home(&p.text("model", "")).to_string_lossy(), "-f", &tmp.to_string_lossy(), "-nt", "-np", "-l", &p.text("language", "auto")])
-            .stderr(std::process::Stdio::null()).output();
-        match out {
-            Ok(o) => {
-                let text = String::from_utf8_lossy(&o.stdout).trim().to_string();
-                if !text.is_empty() {
-                    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) { let _ = writeln!(f, "{text}"); }
-                    *note.lock().unwrap() = text.chars().rev().take(80).collect::<Vec<_>>().into_iter().rev().collect();
-                }
-            }
-            Err(_) => { *note.lock().unwrap() = format!("error: {}", tr("whisper-cli was not found")); break; }
-        }
+        offset += crate::voz::SLICE_SECONDS as f64;
     }
+    let _ = std::fs::remove_file(&tmp);
 }
 
 fn limit_frames(unit: &str, size: f64) -> (bool, f64) {
@@ -832,10 +824,12 @@ fn run(sh: Arc<Shared>, stop: Arc<AtomicBool>) {
                     }
                     "transcribe" => {
                         if r.sink.is_none() {
-                            if b.p.text("model", "").trim().is_empty() {
-                                sh.rec.lock().unwrap().insert(id, RecStatus { state: format!("error: {}", tr("choose a whisper model file (.bin)")), ..Default::default() });
+                            if crate::voz::agent_binary().is_none() {
+                                sh.rec.lock().unwrap().insert(id, RecStatus { state: format!("error: {}", crate::voz::VoiceError::NotInstalled.message()), ..Default::default() });
                             } else {
-                                let (tx, rx) = std::sync::mpsc::sync_channel::<Vec<Frame>>(64);
+                                // (room for 60 s of sound: the model takes a few seconds per slice, and nothing may be
+                                // dropped meanwhile)
+                                let (tx, rx) = std::sync::mpsc::sync_channel::<Vec<Frame>>(6000);
                                 let note = Arc::new(Mutex::new(String::new()));
                                 let (p2, s2, n2) = (b.p.clone(), session.clone(), note.clone());
                                 let handle = std::thread::spawn(move || transcribe_worker(rx, p2, s2, n2));

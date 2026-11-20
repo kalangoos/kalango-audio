@@ -150,12 +150,12 @@ pub struct SoundReport {
     pub pw_rate: Option<u32>,
     /// (unit, state) from `systemctl --user is-active`
     pub services: Vec<(String, String)>,
-    /// helper programs on PATH: pw-record, pw-dump, ffmpeg, ffprobe, whisper-cli, gio
+    /// helper programs on PATH: pw-record, pw-dump, ffmpeg, ffprobe, gio (transcription: see crate::voz)
     pub tools: Vec<(&'static str, bool)>,
     pub ladspa: usize,
 }
 
-pub const TOOLS: [&str; 6] = ["pw-record", "pw-dump", "ffmpeg", "ffprobe", "whisper-cli", "gio"];
+pub const TOOLS: [&str; 5] = ["pw-record", "pw-dump", "ffmpeg", "ffprobe", "gio"];
 
 impl SoundReport {
     /// Sound can be played and captured: the ALSA library loads and PipeWire (or its Pulse side) is there.

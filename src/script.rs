@@ -92,30 +92,6 @@ fn expand_home(p: &str) -> std::path::PathBuf {
     }
 }
 
-/// `recording.transcribe()`: converts the file to 16 kHz mono with ffmpeg and runs whisper.cpp on it in the
-/// background, writing `<recording>.txt` next to it. Returns the text file it will write.
-pub fn transcribe_file(path: &str, command: &str, model: &str, language: &str) -> Result<std::path::PathBuf, String> {
-    let model = expand_home(model.trim());
-    if model.as_os_str().is_empty() { return Err("escolha um modelo whisper (.bin) no bloco Transcrever ou em transcribe({ model })".into()); }
-    if !model.is_file() { return Err(format!("o modelo “{}” não existe", model.display())); }
-    let src = std::path::PathBuf::from(path);
-    if !src.is_file() { return Err(format!("a gravação “{path}” não existe")); }
-    let out_base = src.with_extension("");
-    let txt = src.with_extension("txt");
-    let (command, language) = (if command.trim().is_empty() { "whisper-cli".to_string() } else { command.trim().to_string() }, if language.trim().is_empty() { "auto".to_string() } else { language.trim().to_string() });
-    std::thread::spawn(move || {
-        let tmp = std::env::temp_dir().join(format!("kalango-transcrever-{}-{}.wav", std::process::id(), crate::model::new_uid()));
-        let ok = std::process::Command::new("ffmpeg").args(["-y", "-loglevel", "error", "-i"]).arg(&src).args(["-ar", "16000", "-ac", "1"]).arg(&tmp)
-            .stdin(std::process::Stdio::null()).status().map(|s| s.success()).unwrap_or(false);
-        if ok {
-            let _ = std::process::Command::new(&command).arg("-m").arg(&model).arg("-f").arg(&tmp).args(["-l", &language, "-np", "-otxt", "-of"]).arg(&out_base)
-                .stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status();
-        }
-        let _ = std::fs::remove_file(&tmp);
-    });
-    Ok(txt)
-}
-
 const PRELUDE: &str = r#"
 var __acts = [];
 function __act() { var a = []; for (var i = 0; i < arguments.length; i++) a.push(String(arguments[i])); __acts.push(a); }
@@ -141,9 +117,8 @@ function __recording(r) {
       if (w !== 'editor' && w !== 'player') throw new Error("openWith aceita 'editor' ou 'player', não '" + w + "'");
       __act(w === 'editor' ? 'open_editor' : 'open_player', r.path);
     },
-    transcribe: function (opts) {
-      opts = opts || {};
-      __act('transcribe', r.path, opts.model || '', opts.language || '');
+    transcribe: function () {
+      __act('transcribe', r.path);
     }
   };
 }
@@ -236,9 +211,8 @@ const sec = String(Math.round(r.seconds % 60)).padStart(2, '0');
 const mb = (r.bytes / 1048576).toFixed(1);
 kalango.notify(`Recording ready: ${r.name} (${min}:${sec}, ${mb} MB)`);
 "#),
-    (n_("Transcribe when done"), r#"// Runs the recording through whisper.cpp and saves the text next to it (.txt).
-// The model and language come from the session's Transcribe block; or give them here:
-// ctx.recording.transcribe({ model: '~/models/ggml-base.bin', language: 'pt' });
+    (n_("Transcribe when done"), r#"// Turns the recording into text with KalangoOS's local voice model and saves it next to it (.txt),
+// one "[mm:ss] text" line per stretch of speech. The language is the system's.
 // needs: recording
 
 if (ctx.recording)
@@ -301,7 +275,7 @@ pub fn help() -> String {
         ("  .showInFiles()", tr("opens its folder in the file manager")),
         ("  .openWith('editor')", tr("opens it in the audio editor from Settings")),
         ("  .openWith('player')", tr("plays it in the default player")),
-        ("  .transcribe({ model, language })", tr("writes a .txt next to it (whisper.cpp)")),
+        ("  .transcribe()", tr("writes a .txt next to it (KalangoOS voice model)")),
         ("", ""),
         ("kalango", tr("the app")),
         ("  kalango.sessions()", tr("every session")),
@@ -343,12 +317,12 @@ mod tests {
 
     #[test]
     fn scripts_see_the_trigger_and_ask_for_actions() {
-        let o = run("const g = ctx.recording; if (g.seconds > 5) return; kalango.notify('curta', g.name); g.trash(); g.showInFiles(); g.openWith('editor'); g.openWith('player'); g.transcribe({ language: 'pt' });", &input());
+        let o = run("const g = ctx.recording; if (g.seconds > 5) return; kalango.notify('curta', g.name); g.trash(); g.showInFiles(); g.openWith('editor'); g.openWith('player'); g.transcribe();", &input());
         assert!(o.err.is_none(), "{:?}", o.err);
         assert_eq!(o.acts[0], vec!["notify".to_string(), "curta a.wav".to_string()]);
         assert_eq!(o.acts[1], vec!["trash".to_string(), "/tmp/a.wav".to_string()]);
         assert_eq!(ids(&o), vec!["notify", "trash", "show_in_files", "open_editor", "open_player", "transcribe"]);
-        assert_eq!(o.acts[5], vec!["transcribe", "/tmp/a.wav", "", "pt"]);
+        assert_eq!(o.acts[5], vec!["transcribe", "/tmp/a.wav"]);
         let o = run("if (ctx.recording.seconds > 1) return; kalango.quit();", &input());
         assert!(o.acts.is_empty());
         let o = run("kalango.log(ctx.kind, ctx.session.name, ctx.session.running, ctx.recording.bytes); console.log('x');", &input());

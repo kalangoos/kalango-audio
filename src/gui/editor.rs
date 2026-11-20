@@ -323,10 +323,10 @@ pub fn status_line(b: &Block, running: bool, rec: Option<&crate::engine::RecStat
         },
         "transcribe" => match rec {
             Some(st) if running && !st.state.is_empty() => (false, format!("{} · {}", crate::core::state_label(&st.state), fmt_time(st.seconds))),
-            _ => {
-                let model = p.text("model", "");
-                (false, if model.is_empty() { tr("Choose a whisper.cpp model").to_string() } else { tr("Local model · text when it hears speech").to_string() })
-            }
+            _ => match crate::voz::status() {
+                crate::voz::Status::Ready => (false, tr("Local voice model · text as it hears").to_string()),
+                _ => (true, tr("Voice model not installed").to_string()),
+            },
         },
         "radio_stream" | "rtmp_stream" => match rec {
             Some(st) if running && !st.state.is_empty() => (false, format!("{} · {}", crate::core::state_label(&st.state), fmt_time(st.seconds))),

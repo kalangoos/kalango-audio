@@ -79,7 +79,7 @@
  "the recording that just finished (or null)": "a gravação que acabou de terminar (ou null)",
  "what fired the script": "o que disparou o script",
  "write an automation: {request}": "escreva uma automação: {request}",
- "writes a .txt next to it (whisper.cpp)": "gera um .txt ao lado (whisper.cpp)",
+ "writes a .txt next to it (KalangoOS voice model)": "grava um .txt ao lado (modelo de voz do KalangoOS)",
  "{a} to {b}": "{a} a {b}",
  "{date} (once)": "{date} (uma vez)",
  "{from} to {to}": "{from} às {to}"

@@ -67,14 +67,6 @@ pub fn apply_prefs_to(p: &Prefs, blocks: &mut [crate::model::Block]) {
                     b.p.set("silence_action", 1.0);
                 }
             }
-            "transcribe" => {
-                if b.p.text("model", "").trim().is_empty() && !p.whisper_model.is_empty() {
-                    b.p.set_text("model", &p.whisper_model);
-                }
-                if !p.transcribe_language.is_empty() {
-                    b.p.set_text("language", &p.transcribe_language);
-                }
-            }
             "device_input" if !p.default_input.is_empty() && b.p.text("device", "default") == "default" => b.p.set_text("device", &p.default_input),
             "device_output" if !p.default_output.is_empty() && b.p.text("device", "default") == "default" => b.p.set_text("device", &p.default_output),
             _ => {}
@@ -115,16 +107,6 @@ const FORMATS: [(&str, &str, bool); 6] = [
 const RATES: [u32; 4] = [0, 44100, 48000, 96000];
 const DEPTHS: [u32; 3] = [16, 24, 32];
 const SPLITS: [u32; 5] = [15, 30, 60, 120, 240];
-/// whisper languages: (code, name msgid)
-const LANGUAGES: [(&str, &str); 7] = [
-    ("auto", n_("Detect automatically")),
-    ("pt", n_("Portuguese")),
-    ("en", n_("English")),
-    ("es", n_("Spanish")),
-    ("fr", n_("French")),
-    ("de", n_("German")),
-    ("it", n_("Italian")),
-];
 /// The file name tokens offered as chips: (token, label msgid).
 const TOKENS: [(&str, &str); 4] = [("%name", n_("session")), ("%date", n_("date")), ("%time", n_("time")), ("%counter", n_("counter"))];
 
@@ -144,8 +126,7 @@ struct Page {
     example: gtk::Label,
     format_help: gtk::Label,
     format_dd: gtk::DropDown,
-    whisper_status: gtk::Box,
-    model_label: gtk::Label,
+    voice_status: gtk::Box,
     perm_mic: gtk::Box,
     perm_app: gtk::Box,
     report: RefCell<Option<SoundReport>>,
@@ -453,23 +434,25 @@ fn tool_lines(r: &SoundReport, p: &Prefs) -> Vec<ToolLine> {
         state: if r.has("ffprobe") { tr("Found · durations of compressed files").to_string() } else { tr("Not found: compressed files show no duration").to_string() },
         action: if r.has("ffprobe") { None } else { copy_action("sudo apt install ffmpeg") },
     });
-    let model_ok = !p.whisper_model.is_empty() && crate::core::expand_home(&p.whisper_model).is_file();
-    v.push(if !r.has("whisper-cli") {
-        ToolLine {
+    v.push(match crate::voz::status() {
+        crate::voz::Status::Ready => ToolLine {
+            level: Level::Good,
+            title: tr("Local transcription").to_string(),
+            state: tr("KalangoOS voice model (LFM3-Audio-2B) ready").to_string(),
+            action: None,
+        },
+        crate::voz::Status::NoAgent => ToolLine {
             level: Level::Warn,
             title: tr("Local transcription").to_string(),
-            state: tr("whisper-cli not found").to_string(),
-            action: Some((tr("Get whisper.cpp").to_string(), Rc::new(|ui: &Rc<Ui>| open_uri(ui, "https://github.com/ggml-org/whisper.cpp")))),
-        }
-    } else if !model_ok {
-        ToolLine {
+            state: tr("The KalangoOS agent (kalango-agente) was not found").to_string(),
+            action: None,
+        },
+        crate::voz::Status::NoModel => ToolLine {
             level: Level::Warn,
             title: tr("Local transcription").to_string(),
-            state: tr("whisper-cli found · model not chosen").to_string(),
-            action: Some((tr("Download a model").to_string(), Rc::new(|ui: &Rc<Ui>| open_uri(ui, "https://huggingface.co/ggerganov/whisper.cpp/tree/main")))),
-        }
-    } else {
-        ToolLine { level: Level::Good, title: tr("Local transcription").to_string(), state: tr("whisper-cli and model ready").to_string(), action: None }
+            state: tr("The voice model is not installed — get it in the App Center").to_string(),
+            action: None,
+        },
     });
     v.push(ToolLine {
         level: if r.has("gio") { Level::Good } else { Level::Warn },
@@ -516,10 +499,10 @@ fn fill_tools(ui: &Rc<Ui>, page: &Rc<Page>) {
     }
     // the format help and the transcription status follow the findings
     page.format_help.set_text(&ffmpeg_help(r.has("ffmpeg")));
-    clear(&page.whisper_status);
-    let found = r.has("whisper-cli");
-    page.whisper_status.append(&dot(if found { "teal" } else { "gold" }));
-    page.whisper_status.append(&label(if found { tr("Found") } else { tr("Not found") }, "ka-texto2"));
+    clear(&page.voice_status);
+    let ready = crate::voz::status() == crate::voz::Status::Ready;
+    page.voice_status.append(&dot(if ready { "teal" } else { "gold" }));
+    page.voice_status.append(&label(if ready { tr("Ready") } else { tr("Not installed — App Center") }, "ka-texto2"));
 }
 
 fn refresh_report(ui: &Rc<Ui>, page: &Rc<Page>) {
@@ -755,79 +738,14 @@ fn build_recording(ui: &Rc<Ui>, page_cell: &Rc<RefCell<Option<Rc<Page>>>>) -> (g
     (s, fmt, fhelp, chips, ex)
 }
 
-fn build_transcription(ui: &Rc<Ui>) -> (gtk::Box, gtk::Box, gtk::Label) {
-    let p = prefs(ui);
-    let s = section("transcricao", tr("Transcription"), tr("Transcription runs on this computer with whisper.cpp; nothing leaves it."));
+fn build_transcription(_ui: &Rc<Ui>) -> (gtk::Box, gtk::Box) {
+    let s = section("transcricao", tr("Transcription"), tr("Transcription runs on this computer with KalangoOS’s voice model (LFM3-Audio-2B); nothing leaves it."));
     let status = hbox(8, "");
     status.append(&label(tr("Checking…"), "ka-fraco"));
-    s.append(&row("whisper-cli", tr("The whisper.cpp program that turns speech into text."), &status).0);
-
-    let mbox = hbox(8, "");
-    let ml = line(if p.whisper_model.is_empty() { tr("No model chosen") } else { &p.whisper_model }, "ka-texto2");
-    let mp = hbox(8, "ka-caminho");
-    mp.append(&icons::icon("doc", "muted", 14));
-    mp.append(&ml);
-    mp.set_size_request(240, -1);
-    mbox.append(&mp);
-    let choose = button(tr("Choose…"), "secundario", None);
-    {
-        let (u, ml) = (ui.clone(), ml.clone());
-        choose.connect_clicked(move |_| {
-            let f = gtk::FileFilter::new();
-            f.set_name(Some(tr("whisper models (.bin)")));
-            f.add_pattern("*.bin");
-            let l = gio::ListStore::new::<gtk::FileFilter>();
-            l.append(&f);
-            let fd = gtk::FileDialog::builder().title(tr("whisper model")).modal(true).filters(&l).build();
-            let (u2, ml2) = (u.clone(), ml.clone());
-            fd.open(Some(&u.window), gio::Cancellable::NONE, move |res| {
-                let Ok(file) = res else { return };
-                let Some(path) = file.path() else { return };
-                let v = path.display().to_string();
-                ml2.set_text(&v);
-                // Transcribe blocks that have no model get this one now
-                let n = {
-                    let mut c = u2.core.borrow_mut();
-                    c.store.prefs.whisper_model = v.clone();
-                    let mut n = 0;
-                    for s in c.sessions.iter_mut() {
-                        for b in s.blocks.iter_mut().filter(|b| b.kind == "transcribe" && b.p.text("model", "").trim().is_empty()) {
-                            b.p.set_text("model", &v);
-                            n += 1;
-                        }
-                    }
-                    n
-                };
-                u2.changed(Change::Store);
-                if n > 0 {
-                    u2.changed(Change::Sessions);
-                    u2.toast(&trf("The model was given to {n} Transcribe block(s) that had none.", &[("n", n.to_string())]), None);
-                }
-            });
-        });
-    }
-    mbox.append(&choose);
-    let dl = button(tr("Download"), "fantasma", Some("baixar"));
-    {
-        let u = ui.clone();
-        dl.connect_clicked(move |_| open_uri(&u, "https://huggingface.co/ggerganov/whisper.cpp/tree/main"));
-    }
-    mbox.append(&dl);
-    s.append(&row(tr("Model"), tr("A ggml model file (.bin). “base” is fast; “medium” understands more."), &mbox).0);
-
-    let langs: Vec<String> = LANGUAGES.iter().map(|(_, n)| tr(n).to_string()).collect();
-    let cur = if p.transcribe_language.is_empty() { "auto" } else { p.transcribe_language.as_str() };
-    let ld = dropdown(&langs, LANGUAGES.iter().position(|l| l.0 == cur).unwrap_or(0));
-    dd_width(&ld, 260);
-    {
-        let u = ui.clone();
-        ld.connect_selected_notify(move |d| {
-            let v = LANGUAGES.get(d.selected() as usize).map(|l| l.0.to_string()).unwrap_or_default();
-            set_pref(&u, |p| p.transcribe_language = if v == "auto" { String::new() } else { v });
-        });
-    }
-    s.append(&row(tr("Language"), tr("Saying it helps with short recordings."), &ld).0);
-    (s, status, ml)
+    s.append(&row(tr("Voice model"), tr("The same local model the system uses for dictation. Install it in the App Center."), &status).0);
+    let lang = label(tr("The system’s language"), "ka-texto2");
+    s.append(&row(tr("Language"), tr("Transcripts follow the language chosen in the system’s settings."), &lang).0);
+    (s, status)
 }
 
 fn build_permissions(ui: &Rc<Ui>) -> (gtk::Box, gtk::Box, gtk::Box) {
@@ -1012,7 +930,7 @@ pub fn page(ui: &Rc<Ui>) -> gtk::Widget {
     let page_cell: Rc<RefCell<Option<Rc<Page>>>> = Rc::new(RefCell::new(None));
     let dev = build_devices(ui);
     let (rec, format_dd, format_help, chips, example) = build_recording(ui, &page_cell);
-    let (tra, whisper_status, model_label) = build_transcription(ui);
+    let (tra, voice_status) = build_transcription(ui);
     let (perm, perm_mic, perm_app) = build_permissions(ui);
     let (tools, tools_slot, tools_panel, tools_rows) = build_tools(ui);
     let agent = build_agent(ui);
@@ -1062,8 +980,7 @@ pub fn page(ui: &Rc<Ui>) -> gtk::Widget {
         example,
         format_help,
         format_dd,
-        whisper_status,
-        model_label,
+        voice_status,
         perm_mic,
         perm_app,
         report: RefCell::new(None),
@@ -1111,8 +1028,6 @@ pub fn page(ui: &Rc<Ui>) -> gtk::Widget {
             if name == "ajustes" {
                 refresh_report(ui, &p);
                 fill_permissions(ui, &p);
-                let m = prefs(ui).whisper_model;
-                p.model_label.set_text(if m.is_empty() { tr("No model chosen") } else { &m });
                 sync_nav(&p);
             }
         });
@@ -1136,8 +1051,6 @@ mod tests {
             split_long: true,
             split_minutes: 30,
             skip_silence: true,
-            whisper_model: "/m/ggml-base.bin".into(),
-            transcribe_language: "pt".into(),
             default_input: "hw:1".into(),
             ..Default::default()
         };
@@ -1152,9 +1065,6 @@ mod tests {
         assert_eq!(rec.p.text("file_name", ""), "%name %date");
         assert_eq!((rec.p.num("split_on", 0.0), rec.p.num("split_size", 0.0), rec.p.text("split_unit", "")), (1.0, 30.0, "time*60".to_string()));
         assert_eq!(rec.p.num("silence_on", 0.0), 1.0);
-        let tb = s.blocks.iter().find(|b| b.kind == "transcribe").unwrap();
-        assert_eq!(tb.p.text("model", ""), "/m/ggml-base.bin");
-        assert_eq!(tb.p.text("language", ""), "pt");
         let mic = s.blocks.iter().find(|b| b.kind == "device_input").unwrap();
         assert_eq!(mic.p.text("device", ""), "hw:1");
     }

@@ -53,7 +53,7 @@
   "subtitle": "Browser + microphone, with transcription",
   "category": "Record",
   "icon": "meeting",
-  "desc": "Joins the call open in the browser with your voice, records everything into one file and writes the transcript at the same time. Choose the whisper model in the Transcribe block.",
+  "desc": "Joins the call open in the browser with your voice, records everything into one file and writes the transcript at the same time.",
   "blocks": [
    {
     "kind": "app_source",

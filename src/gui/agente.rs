@@ -353,7 +353,7 @@ pub fn plan(text: &str, templates: &[Template], now_min: u32, weekday: u32) -> O
         return Some(empty(vec![blank(
             Action::TranscribeLatest,
             tr("Transcribe the latest recording now").to_string(),
-            tr("the built-in “Transcribe when done” script runs whisper.cpp on it; the text goes next to the audio").to_string(),
+            tr("KalangoOS’s voice model turns it into text, on this computer; the text goes next to the audio").to_string(),
         )]));
     }
     let template = match template {
@@ -445,7 +445,7 @@ pub fn plan(text: &str, templates: &[Template], now_min: u32, weekday: u32) -> O
             detail: if block {
                 tr("the Transcribe block writes the text next to the audio; nothing leaves the computer").to_string()
             } else {
-                tr("an automation runs the built-in “Transcribe when done” script with whisper.cpp when the file is finished").to_string()
+                tr("an automation runs the built-in “Transcribe when done” script with the voice model when the file is finished").to_string()
             },
             system: false,
             optional: true,
@@ -460,25 +460,6 @@ pub fn plan(text: &str, templates: &[Template], now_min: u32, weekday: u32) -> O
 /// The built-in script that transcribes the recording an event brings.
 fn transcribe_script() -> Option<&'static str> {
     crate::script::BUILTIN.iter().find(|(_, t)| t.contains(".transcribe(")).map(|(n, _)| *n)
-}
-
-/// A script that transcribes the finished recording with the model (and language) chosen in Settings, since the
-/// built-in one takes the model from a Transcribe block and a session made for this may have none.
-pub fn settings_script(model: &str, language: &str) -> Option<crate::presets::Script> {
-    if model.trim().is_empty() {
-        return None;
-    }
-    let q = |v: &str| serde_json::to_string(v).unwrap_or_else(|_| "\"\"".into());
-    let lang = if language.is_empty() { "auto" } else { language };
-    Some(crate::presets::Script {
-        name: tr("Transcribe with the Settings model").to_string(),
-        text: format!(
-            "// {}\n// needs: recording\n\nif (ctx.recording)\n  ctx.recording.transcribe({{ model: {}, language: {} }});\n",
-            tr("Runs whisper.cpp on the finished recording with the model chosen in Settings › Transcription."),
-            q(model),
-            q(lang)
-        ),
-    })
 }
 
 fn date_in(days: u32) -> u32 {
@@ -535,16 +516,8 @@ fn execute(ui: &Rc<Ui>, p: &Plan) -> (Option<usize>, String) {
         let Some(t) = c.templates.iter().position(|t| t.name == *tname) else { return (None, String::new()) };
         let i = c.new_with_prefs(t);
         let taken = c.sessions.iter().enumerate().any(|(k, s)| k != i && s.name == p.name);
-        // the automation's script: the built-in one, or (with a model chosen in Settings) a copy that names it
-        let script = match settings_script(&c.store.prefs.whisper_model, &c.store.prefs.transcribe_language) {
-            Some(sc) => {
-                let name = sc.name.clone();
-                c.store.scripts.retain(|x| x.name != name);
-                c.store.scripts.push(sc);
-                Some(name)
-            }
-            None => transcribe_script().map(str::to_string),
-        };
+        // the automation's script: the built-in one (KalangoOS's voice model, the system's language)
+        let script = transcribe_script().map(str::to_string);
         let s = &mut c.sessions[i];
         if !p.name.trim().is_empty() && !taken {
             s.name = p.name.trim().to_string();
@@ -787,8 +760,8 @@ fn render(ui: &Rc<Ui>, panel: &Rc<Panel>) {
             let n = ui.core.borrow().running.len();
             d = format!("{d} · {}", trf("{n} running now", &[("n", n.to_string())]));
         }
-        if matches!(s.action, Action::Transcribe(_) | Action::TranscribeLatest) && ui.core.borrow().store.prefs.whisper_model.is_empty() {
-            d = format!("{d} · {}", tr("choose a whisper model in Settings › Transcription first"));
+        if matches!(s.action, Action::Transcribe(_) | Action::TranscribeLatest) && crate::voz::status() != crate::voz::Status::Ready {
+            d = format!("{d} · {}", tr("The voice model is not installed — get it in the App Center"));
         }
         t.append(&para(&d, "ka-fraco"));
         r.append(&t);
@@ -1097,17 +1070,6 @@ mod tests {
         assert_eq!(actions(&p("summarize the last recording").unwrap()), vec![Action::OpenLatestTranscript]);
         assert_eq!(actions(&p("transcreva a última gravação").unwrap()), vec![Action::TranscribeLatest]);
         assert_eq!(actions(&p("transcribe the latest recording").unwrap()), vec![Action::TranscribeLatest]);
-    }
-
-    #[test]
-    fn the_settings_model_reaches_the_script() {
-        assert!(settings_script("", "pt").is_none());
-        let sc = settings_script("/m/ggml base.bin", "").unwrap();
-        assert!(crate::script::needs(&sc.text).recording);
-        let input = crate::script::Input { recording: Some(crate::script::RecordingInfo { path: "/tmp/a.wav".into(), ..Default::default() }), ..Default::default() };
-        let out = crate::script::run(&sc.text, &input);
-        assert!(out.err.is_none(), "{:?}", out.err);
-        assert_eq!(out.acts[0], vec!["transcribe", "/tmp/a.wav", "/m/ggml base.bin", "auto"]);
     }
 
     #[test]
