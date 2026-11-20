@@ -164,7 +164,7 @@ fn prefs(ui: &Rc<Ui>) -> Prefs {
 /// A settings row: title and short help on the left, the control on the right.
 fn row(title: &str, help: &str, control: &impl IsA<gtk::Widget>) -> (gtk::Box, gtk::Label) {
     let r = hbox(16, "ka-ajuste-linha");
-    let texts = vbox(3, "");
+    let texts = vbox(2, "");
     texts.set_hexpand(true);
     texts.set_valign(Align::Center);
     texts.append(&line(title, "ka-texto"));
@@ -494,7 +494,7 @@ fn fill_tools(ui: &Rc<Ui>, page: &Rc<Page>) {
     };
     let p = prefs(ui);
     for t in tool_lines(&r, &p) {
-        let row = hbox(10, "ka-ferramenta");
+        let row = hbox(8, "ka-ferramenta");
         let d = dot(t.level.token());
         d.set_valign(Align::Start);
         d.set_margin_top(5);
@@ -506,7 +506,7 @@ fn fill_tools(ui: &Rc<Ui>, page: &Rc<Page>) {
         if let Some((l, f)) = t.action {
             let b = button(&l, "secundario", None);
             b.set_halign(Align::Start);
-            b.set_margin_top(6);
+            b.set_margin_top(8);
             let u = ui.clone();
             b.connect_clicked(move |_| f(&u));
             txt.append(&b);
@@ -1008,7 +1008,7 @@ pub fn page(ui: &Rc<Ui>) -> gtk::Widget {
     narrow_nav.set_child(Some(&narrow_row));
     narrow_nav.add_css_class("ka-ajustes-nav-estreita");
 
-    let content = vbox(28, "ka-ajustes-conteudo");
+    let content = vbox(24, "ka-ajustes-conteudo");
     let page_cell: Rc<RefCell<Option<Rc<Page>>>> = Rc::new(RefCell::new(None));
     let dev = build_devices(ui);
     let (rec, format_dd, format_help, chips, example) = build_recording(ui, &page_cell);

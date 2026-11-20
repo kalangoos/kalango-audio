@@ -1045,8 +1045,8 @@ fn refresh_list(ui: &Rc<Ui>, page: &Rc<Page>, animate: bool) {
         let g = group_of(days, date);
         if last.as_ref() != Some(&g) {
             let cap = caps(&group_title(&g));
-            cap.set_margin_top(if last.is_none() { 4 } else { 14 });
-            cap.set_margin_bottom(6);
+            cap.set_margin_top(if last.is_none() { 4 } else { 12 });
+            cap.set_margin_bottom(8);
             page.list.append(&cap);
             last = Some(g);
         }
@@ -1222,7 +1222,7 @@ fn refresh_detail(ui: &Rc<Ui>, page: &Rc<Page>) {
     top.append(&thead);
     page.side.append(&top);
 
-    let tlist = vbox(2, "");
+    let tlist = vbox(8, "");
     let mut rows = vec![];
     for l in &lines {
         let rw = hbox(12, "ka-grav-fala");
@@ -1520,7 +1520,7 @@ pub fn page(ui: &Rc<Ui>) -> gtk::Widget {
 
     let chips = hbox(8, "ka-grav-filtros");
     chips.set_margin_top(16);
-    chips.set_margin_bottom(14);
+    chips.set_margin_bottom(16);
     let chips_sc = gtk::ScrolledWindow::new();
     chips_sc.set_vscrollbar_policy(gtk::PolicyType::Never);
     chips_sc.set_hscrollbar_policy(gtk::PolicyType::External);

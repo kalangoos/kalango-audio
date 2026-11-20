@@ -1,13 +1,14 @@
 /* Kalango Audio · ajustes */
 .ka-ajustes-nav { background: @k_bg; border-right: 1px solid @k_border; padding: 20px 10px; }
-.ka-ajustes-titulo { font-size: 18px; margin: 4px 10px 14px 10px; }
-button.ka-ajustes-item { min-height: 38px; padding: 0 10px; border-radius: 4px; transition: background-color 120ms ease; }
+.ka-ajustes-titulo { font-size: 18px; margin: 4px 10px 16px 10px; }
+button.ka-ajustes-item { min-height: 38px; padding: 0 12px; border-radius: 4px; transition: background-color 120ms ease; }
 button.ka-ajustes-item:hover { background: alpha(@k_realce, 0.05); }
 button.ka-ajustes-item.ativo { background: alpha(@k_accent, 0.18); }
 button.ka-ajustes-item.ativo label { color: @k_accent_text; }
 .ka-ajustes-nav-estreita { padding: 12px 20px 0 20px; }
 .ka-ajustes-conteudo { padding: 20px 24px 32px 32px; }
-.ka-ajuste-secao > .ka-titulo2 { margin-top: 2px; }
+/* the subtitle sits 4 px under the section title (the section box spaces its rows by 8) */
+.ka-ajuste-secao > .ka-titulo2 { margin-top: 2px; margin-bottom: -4px; }
 .ka-ajuste-linha { background: @k_surface; border: 1px solid @k_border; border-radius: 6px; padding: 12px 16px; min-height: 34px; }
 .ka-caminho { background: @k_field; border: 1px solid @k_border; border-radius: 4px; min-height: 30px; padding: 0 10px; }
 .ka-fichas { background: @k_field; border: 1px solid @k_border; border-radius: 4px; min-height: 30px; padding: 0 6px; }

@@ -1,6 +1,6 @@
 /* Kalango Audio · modelos */
-.ka-modelo { padding: 12px 14px 14px 14px; }
-.ka-modelo.selecionado { padding: 11px 13px 13px 13px; }
+.ka-modelo { padding: 12px; }
+.ka-modelo.selecionado { padding: 11px; }
 .ka-modelo-poco { min-height: 64px; }
 .ka-modelo-mais { border-radius: 6px; }
 .ka-modelos-previa-rolagem { margin: 20px 24px 20px 0; background: @k_surface; border: 1px solid @k_border; border-radius: 8px; }

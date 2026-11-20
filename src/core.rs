@@ -151,6 +151,8 @@ pub struct Core {
     pub quit_now: bool,
     /// a script asked for the audio editor but none is set: the settings should open
     pub wants_editor_setting: bool,
+    /// short messages for the person (a start that was refused…): the window shows and clears them
+    pub notices: Vec<String>,
     /// live meters per (session uid, block id)
     pub disp: HashMap<(u64, u64), Disp>,
     last_meter_tick: Instant,
@@ -224,6 +226,7 @@ impl Core {
             quit_state: 0,
             quit_now: false,
             wants_editor_setting: false,
+            notices: vec![],
             disp: HashMap::new(),
             last_meter_tick: Instant::now(),
             last_dev: Instant::now(),
@@ -465,6 +468,11 @@ impl Core {
             self.disp.retain(|(s, _), _| *s != uid);
             self.rec_scanned = None;
         } else {
+            // the computer's sound played back into itself would echo without end
+            if let Some(why) = feedback_risk(s) {
+                self.notices.push(why);
+                return;
+            }
             self.queue_event("session_starting", Some(uid), None);
             let s = &self.sessions[idx];
             // "open an address": open the chosen program with the address when the session starts
@@ -789,6 +797,24 @@ impl Core {
         }
     }
 
+    /// Settles the open session's current state into the undo stack right away. Discrete edits (connecting or
+    /// removing a wire, adding or removing a block) call it before and after: before, it takes the starting point
+    /// when undo has none yet (or commits edits still settling as their own step); after, it makes the edit one step
+    /// that Ctrl+Z restores at once, without waiting for `track_undo`'s half second of quiet.
+    pub fn checkpoint(&mut self) {
+        let Some(s) = self.sessions.get(self.cur) else { return };
+        let (uid, snap) = (s.uid, serde_json::to_string(s).unwrap_or_default());
+        match &self.base {
+            Some((u, b)) if *u == uid => {
+                if *b != snap {
+                    self.commit_undo(snap.clone());
+                }
+            }
+            _ => self.base = Some((uid, snap.clone())),
+        }
+        self.last_seen = snap;
+    }
+
     fn commit_undo(&mut self, snap: String) {
         if let Some(b) = self.base.take() {
             self.undo.push(b);
@@ -1023,6 +1049,43 @@ impl Core {
             self.last_save = Instant::now() - std::time::Duration::from_secs(5);
             self.save_if_needed();
         }
+    }
+}
+
+// ---------------- feedback (echo) guard ----------------
+
+/// Sources that capture what the computer plays: the system sound, and an Application block set to any program
+/// (which includes Kalango Audio itself).
+fn hears_the_computer(b: &Block) -> bool {
+    b.enabled && (b.kind == "system_sound" || (b.kind == "app_source" && b.p.text("app", "Web Browser") == "Any Application"))
+}
+
+/// The audio outputs that would play the computer's own sound back into it: every enabled Audio output reached from
+/// a source that hears the computer. Any device counts, since the system sound includes whatever any output plays.
+pub fn feedback_outputs(s: &Session) -> Vec<u64> {
+    let mut seen: HashSet<u64> = HashSet::new();
+    let mut todo: Vec<u64> = s.blocks.iter().filter(|b| hears_the_computer(b)).map(|b| b.id).collect();
+    let mut outs = vec![];
+    while let Some(id) = todo.pop() {
+        if !seen.insert(id) {
+            continue;
+        }
+        let Some(b) = s.block(id) else { continue };
+        if b.kind == "device_output" && b.enabled {
+            outs.push(id);
+        }
+        todo.extend(b.outs.iter().copied());
+    }
+    outs.sort_unstable();
+    outs
+}
+
+/// Why a session must not start because it would echo (None when it is safe).
+pub fn feedback_risk(s: &Session) -> Option<String> {
+    if feedback_outputs(s).is_empty() {
+        None
+    } else {
+        Some(tr("This would play the computer’s sound again on top of itself").to_string())
     }
 }
 
@@ -1313,6 +1376,76 @@ mod tests {
         let p = app.recs[0].path.clone();
         app.set_tags(&p, vec!["reunião".into()]);
         assert_eq!(app.tags_of(&p), vec!["reunião".to_string()]);
+    }
+
+    #[test]
+    fn the_computer_sound_never_plays_back_into_itself() {
+        let mut s = Session::new("t");
+        let sys = s.add_block("system_sound", 0.0, 0.0);
+        let vol = s.add_block("volume", 6.0, 0.0);
+        let out = s.add_block("device_output", 12.0, 0.0);
+        let rec = s.add_block("recorder", 12.0, 5.0);
+        s.connect(sys, vol);
+        s.connect(vol, rec);
+        assert_eq!(feedback_risk(&s), None, "recording the system sound is fine");
+        s.connect(vol, out);
+        assert!(feedback_risk(&s).is_some());
+        assert_eq!(feedback_outputs(&s), vec![out]);
+        // a turned-off output plays nothing; a turned-off source hears nothing
+        s.blocks.iter_mut().find(|b| b.id == out).unwrap().enabled = false;
+        assert_eq!(feedback_risk(&s), None);
+        s.blocks.iter_mut().find(|b| b.id == out).unwrap().enabled = true;
+        s.blocks.iter_mut().find(|b| b.id == sys).unwrap().enabled = false;
+        assert_eq!(feedback_risk(&s), None);
+        // a microphone to the headphones is not a loop
+        let mut m = Session::new("m");
+        let mic = m.add_block("device_input", 0.0, 0.0);
+        let o = m.add_block("device_output", 6.0, 0.0);
+        m.connect(mic, o);
+        assert_eq!(feedback_risk(&m), None);
+        // an Application block listening to any program is the same loop; one program is not
+        let mut a = Session::new("a");
+        let app = a.add_block("app_source", 0.0, 0.0);
+        let o = a.add_block("device_output", 6.0, 0.0);
+        a.connect(app, o);
+        assert_eq!(feedback_risk(&a), None, "the default is the browser");
+        a.blocks.iter_mut().find(|b| b.id == app).unwrap().p.set_text("app", "Any Application");
+        assert!(feedback_risk(&a).is_some());
+    }
+
+    #[test]
+    fn a_session_that_would_echo_does_not_start() {
+        let mut s = Session::new("eco");
+        let sys = s.add_block("system_sound", 0.0, 0.0);
+        let out = s.add_block("device_output", 6.0, 0.0);
+        s.connect(sys, out);
+        let mut app = Core::ephemeral(vec![s]);
+        app.toggle_run(0);
+        assert!(!app.is_running(app.sessions[0].uid), "nothing was opened");
+        assert_eq!(app.notices.len(), 1);
+    }
+
+    #[test]
+    fn a_checkpoint_makes_one_undo_step_at_once() {
+        let mut s = Session::new("t");
+        let a = s.add_block("test_tone", 0.0, 0.0);
+        let b = s.add_block("volume", 6.0, 0.0);
+        s.connect(a, b);
+        let mut app = Core::ephemeral(vec![s]);
+        // no track_undo ever ran (as in tests and the demo): the first checkpoint takes the starting point
+        app.checkpoint();
+        app.session_mut().unwrap().disconnect(a, b);
+        app.checkpoint();
+        assert!(app.can_undo());
+        app.undo();
+        assert_eq!(app.session().unwrap().block(a).unwrap().outs, vec![b], "the wire is back");
+        app.redo();
+        assert!(app.session().unwrap().block(a).unwrap().outs.is_empty());
+        // a checkpoint with nothing new adds no step
+        app.undo();
+        app.checkpoint();
+        app.checkpoint();
+        assert!(!app.can_undo());
     }
 
     #[test]

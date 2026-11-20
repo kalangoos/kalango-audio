@@ -110,7 +110,7 @@ impl Library {
         search.set_margin_start(12);
         search.set_margin_end(12);
         search.set_margin_top(12);
-        search.set_margin_bottom(8);
+        search.set_margin_bottom(4);
         root.append(&search);
         let list = vbox(0, "ka-biblioteca-lista");
         let sc = scroller(&list);

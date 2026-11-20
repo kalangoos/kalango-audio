@@ -128,12 +128,12 @@ fn card(ui: &Rc<Ui>, page: &Rc<Page>, i: usize) -> gtk::Box {
     name.set_margin_top(12);
     card.append(&name);
     let sub = line(tr(&t.subtitle), "ka-texto2");
-    sub.set_margin_top(3);
+    sub.set_margin_top(4);
     card.append(&sub);
     if !t.category.is_empty() {
         let ch = chip(tr(&t.category), "muted");
         ch.set_halign(Align::Start);
-        ch.set_margin_top(8);
+        ch.set_margin_top(4);
         card.append(&ch);
     }
     drop(c);
@@ -328,8 +328,8 @@ pub fn page(ui: &Rc<Ui>) -> gtk::Widget {
     let grid = gtk::FlowBox::new();
     grid.set_selection_mode(gtk::SelectionMode::None);
     grid.set_homogeneous(true);
-    grid.set_column_spacing(14);
-    grid.set_row_spacing(14);
+    grid.set_column_spacing(16);
+    grid.set_row_spacing(16);
     grid.set_min_children_per_line(1);
     grid.set_valign(Align::Start);
     grid.set_margin_top(16);

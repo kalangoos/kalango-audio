@@ -25,6 +25,15 @@ use std::rc::Rc;
 
 // ---------------------------------------------------------------- changes to blocks (shared by the parts)
 
+/// Runs a discrete edit of the open session as one undo step (Ctrl+Z restores it at once).
+pub fn edit<R>(ui: &Rc<Ui>, f: impl FnOnce(&mut Core) -> R) -> R {
+    let mut c = ui.core.borrow_mut();
+    c.checkpoint();
+    let r = f(&mut c);
+    c.checkpoint();
+    r
+}
+
 /// Changes a block of the open session. Returns false when it is gone.
 pub fn with_block(ui: &Rc<Ui>, id: u64, f: impl FnOnce(&mut Block)) -> bool {
     let mut c = ui.core.borrow_mut();
@@ -39,7 +48,14 @@ pub fn with_block(ui: &Rc<Ui>, id: u64, f: impl FnOnce(&mut Block)) -> bool {
 
 /// On/off (off = bypass: the sound passes unchanged).
 pub fn toggle_block(ui: &Rc<Ui>, id: u64) {
-    if with_block(ui, id, |b| b.enabled = !b.enabled) {
+    let found = edit(ui, |c| match c.session_mut().and_then(|s| s.blocks.iter_mut().find(|b| b.id == id)) {
+        Some(b) => {
+            b.enabled = !b.enabled;
+            true
+        }
+        None => false,
+    });
+    if found {
         ui.changed(Change::Sessions);
     }
 }
@@ -48,6 +64,7 @@ pub fn toggle_block(ui: &Rc<Ui>, id: u64) {
 pub fn duplicate_block(ui: &Rc<Ui>, id: u64) {
     let new = {
         let mut c = ui.core.borrow_mut();
+        c.checkpoint();
         let Some(s) = c.session_mut() else { return };
         let Some(src) = s.block(id).cloned() else { return };
         let (mut x, mut y) = (src.x, src.y + 4.0);
@@ -64,6 +81,7 @@ pub fn duplicate_block(ui: &Rc<Ui>, id: u64) {
             nb.enabled = src.enabled;
         }
         c.sel = Some(nid);
+        c.checkpoint();
         nid
     };
     let _ = new;
@@ -73,20 +91,56 @@ pub fn duplicate_block(ui: &Rc<Ui>, id: u64) {
 
 /// Removes a block (in automatic wiring the blocks around it are joined).
 pub fn remove_block(ui: &Rc<Ui>, id: u64) {
-    ui.core.borrow_mut().remove_block_smart(id);
+    edit(ui, |c| c.remove_block_smart(id));
     ui.changed(Change::Sessions);
     ui.changed(Change::Selection);
 }
 
+/// Switches between automatic and manual wiring. Existing wires are never changed by the switch: turning automatic
+/// wiring back on offers to connect the blocks left without wires, left to right, and does it only when asked.
 pub fn toggle_manual(ui: &Rc<Ui>) {
-    let manual = {
-        let mut c = ui.core.borrow_mut();
-        let Some(s) = c.session_mut() else { return };
+    let (manual, plan) = edit(ui, |c| {
+        let Some(s) = c.session_mut() else { return (false, vec![]) };
         s.manual = !s.manual;
-        s.manual
-    };
-    ui.toast(if manual { tr("Manual wiring: connect the blocks yourself") } else { tr("Automatic wiring: new blocks join their neighbours") }, None);
+        let plan = if s.manual { vec![] } else { canvas_mod::rewire_plan(s) };
+        (s.manual, plan)
+    });
     ui.changed(Change::Sessions);
+    if manual {
+        ui.toast(tr("Manual wiring: connect the blocks yourself"), None);
+    } else if plan.is_empty() {
+        ui.toast(tr("Automatic wiring: new blocks join their neighbours"), None);
+    } else {
+        ui.toast(
+            tr("Automatic wiring is on. Some blocks have no wires yet."),
+            Some((
+                tr("Connect them"),
+                Box::new(|u: &Rc<Ui>| {
+                    edit(u, |c| {
+                        if let Some(s) = c.session_mut() {
+                            // worked out again: the session may have changed since the offer
+                            for (a, b) in canvas_mod::rewire_plan(s) {
+                                s.connect(a, b);
+                            }
+                        }
+                    });
+                    u.changed(Change::Sessions);
+                }),
+            )),
+        );
+    }
+}
+
+/// Shows the messages Core left for the person (a start it refused, and why) as toasts.
+fn show_notices(ui: &Rc<Ui>) {
+    let notes: Vec<String> = std::mem::take(&mut ui.core.borrow_mut().notices);
+    for n in notes {
+        if n == tr("This would play the computer’s sound again on top of itself") {
+            ui.toast(&format!("{n}. {}", tr("Use headphones on another device, or remove the output.")), None);
+        } else {
+            ui.toast(&n, None);
+        }
+    }
 }
 
 // ---------------------------------------------------------------- what a block says (pure)
@@ -1107,6 +1161,7 @@ pub fn page(ui: &Rc<Ui>) -> gtk::Widget {
                 c.want_apps.store(app, std::sync::atomic::Ordering::Relaxed);
             }
             Change::Running => {
+                show_notices(ui);
                 e.bar.tick(ui);
                 e.canvas.refresh(true);
             }
@@ -1129,6 +1184,10 @@ pub fn page(ui: &Rc<Ui>) -> gtk::Widget {
         let e = ed.clone();
         let n = Cell::new(0u32);
         ui.on_tick(move |ui| {
+            // starts refused by timers, automations or scripts are said on any page
+            if !ui.core.borrow().notices.is_empty() {
+                show_notices(ui);
+            }
             if ui.page() != "editor" {
                 return;
             }

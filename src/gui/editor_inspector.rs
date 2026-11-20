@@ -189,12 +189,15 @@ impl Inspector {
     fn empty_page(&self, page: &gtk::Box) {
         page.append(&label(tr("No block selected"), "ka-titulo2"));
         let p = para(tr("Click a block to see its settings. Drag a block from the library to the canvas, or onto a wire to put it in between."), "ka-texto2");
-        p.set_margin_top(6);
+        p.set_margin_top(8);
         page.append(&p);
         let cap = caps(tr("Shortcuts"));
         cap.set_margin_top(24);
-        cap.set_margin_bottom(8);
+        cap.set_margin_bottom(12);
         page.append(&cap);
+        // one keycap per row, 8 px apart (espaco/2); the keycap keeps its own height instead of filling the row
+        let keys = vbox(8, "ka-atalhos");
+        page.append(&keys);
         for (key, what) in [
             (tr("Space"), tr("Start or stop")),
             ("Ctrl R", tr("Record now")),
@@ -205,10 +208,11 @@ impl Inspector {
             let row = hbox(12, "ka-atalho-linha");
             let k = label(key, "ka-atalho ka-tecla");
             k.set_xalign(0.5);
+            k.set_valign(Align::Center);
             k.set_size_request(56, -1);
             row.append(&k);
             row.append(&label(what, "ka-texto2"));
-            page.append(&row);
+            keys.append(&row);
         }
     }
 
@@ -242,7 +246,7 @@ impl Inspector {
         // the error the block reports while running
         {
             let err = para("", "ka-texto2 cor-red");
-            err.set_margin_top(10);
+            err.set_margin_top(12);
             err.set_visible(false);
             page.append(&err);
             let uid = self.built_uid();
@@ -261,7 +265,7 @@ impl Inspector {
         }
 
         self.presets(page, b);
-        let body = vbox(14, "ka-ajustes");
+        let body = vbox(16, "ka-ajustes");
         body.set_margin_top(16);
         page.append(&body);
         let cx = Cx { insp: self.clone(), id, body: body.clone(), b: b.clone() };
@@ -273,7 +277,7 @@ impl Inspector {
 
         // duplicate, remove and the note
         let foot = hbox(8, "");
-        foot.set_margin_top(20);
+        foot.set_margin_top(24);
         let dup = button(tr("Duplicate"), "secundario", None);
         let rem = button(tr("Remove"), "fantasma", Some("lixeira"));
         {
@@ -298,8 +302,8 @@ impl Inspector {
         let list: Vec<(Preset, bool)> = self.ui.core.borrow().presets_for(&b.kind);
         let id = b.id;
         let cap = label(tr("Preset"), "ka-texto2");
-        cap.set_margin_top(18);
-        cap.set_margin_bottom(6);
+        cap.set_margin_top(16);
+        cap.set_margin_bottom(8);
         page.append(&cap);
         let row = hbox(8, "");
         let matching = list.iter().position(|(p, _)| p.p.n.iter().all(|(k, v)| (b.p.num(k, f64::NAN) - v).abs() < 0.005) && p.p.s.iter().all(|(k, v)| b.p.text(k, "") == *v));
@@ -328,7 +332,7 @@ impl Inspector {
         let save = gtk::Button::with_label(tr("Save as…"));
         save.add_css_class("ka-link-botao");
         save.set_halign(Align::End);
-        save.set_margin_top(6);
+        save.set_margin_top(8);
         page.append(&save);
         // the name of the new preset
         let ask = hbox(8, "");
@@ -390,7 +394,7 @@ impl Inspector {
         let area = gtk::DrawingArea::new();
         area.set_content_height(150);
         area.set_hexpand(true);
-        area.set_margin_top(18);
+        area.set_margin_top(16);
         area.add_css_class("ka-curva");
         {
             let u = self.ui.clone();
@@ -447,7 +451,7 @@ impl Inspector {
         rows.push((tr("Output"), false));
         for (i, (title, input)) in rows.into_iter().enumerate() {
             let head = hbox(0, "");
-            head.set_margin_top(if i == 0 { 22 } else { 12 });
+            head.set_margin_top(if i == 0 { 24 } else { 12 });
             head.append(&line(title, "ka-texto2"));
             let v = label("", "ka-fraco ka-tnum");
             head.append(&v);
@@ -1149,8 +1153,8 @@ fn app_source(cx: &Cx) {
     cx.note(tr("Captures only this program’s sound (through PipeWire), on any output it uses, even with other programs playing."));
     let more = gtk::Expander::new(Some(tr("More options")));
     more.add_css_class("ka-expansor");
-    let inner = vbox(12, "");
-    inner.set_margin_top(10);
+    let inner = vbox(16, "");
+    inner.set_margin_top(12);
     cx.toggle_in(&inner, tr("Mix in the microphone"), "capture_inputs", true);
     let split = cx.toggle_in(&inner, tr("Split into the channels"), "split_channels", false);
     split.set_sensitive(cx.num("capture_inputs", 0.0) > 0.5);
@@ -1209,7 +1213,7 @@ fn mixer(cx: &Cx) {
     let ups = upstream(&cx.ui().core.borrow(), cx.id);
     cx.note(tr("The tracks follow the order in which the blocks were connected (up to 5)."));
     for i in 0..5 {
-        let card = vbox(10, "ka-cartao2 ka-faixa-mixer");
+        let card = vbox(12, "ka-cartao2 ka-faixa-mixer");
         let top = hbox(6, "");
         let name = ups.get(i).map(|u| u.1.clone()).unwrap_or_else(|| trf("Track {n}", &[("n", (i + 1).to_string())]));
         top.append(&line(&name, if ups.get(i).is_some() { "ka-titulo3" } else { "ka-fraco" }));
@@ -1344,7 +1348,7 @@ const PEQ_TYPES: [&str; 7] = [n_("Peak"), n_("Low shelf"), n_("High shelf"), n_(
 fn parametric(cx: &Cx) {
     let n = (cx.num("bands", 3.0) as usize).min(16);
     for i in 0..n {
-        let card = vbox(10, "ka-cartao2 ka-faixa-mixer");
+        let card = vbox(12, "ka-cartao2 ka-faixa-mixer");
         let top = hbox(8, "");
         top.append(&line(&trf("Band {n}", &[("n", (i + 1).to_string())]), "ka-titulo3"));
         let on = switch(cx.num(&format!("b{i}_on"), 1.0) > 0.5);
@@ -1516,8 +1520,8 @@ fn recorder(cx: &Cx) {
     {
         let ex = gtk::Expander::new(Some(tr("More quality options")));
         ex.add_css_class("ka-expansor");
-        let inner = vbox(12, "");
-        inner.set_margin_top(10);
+        let inner = vbox(16, "");
+        inner.set_margin_top(12);
         let sub = Cx { insp: cx.insp.clone(), id: cx.id, body: inner.clone(), b: cx.b.clone() };
         let mut rates: Vec<(String, f64)> = vec![(tr("The session’s").to_string(), 0.0)];
         rates.extend([22050u32, 32000, 44100, 48000, 88200, 96000].iter().map(|r| (format!("{r} Hz"), *r as f64)));
@@ -1539,8 +1543,8 @@ fn recorder(cx: &Cx) {
     {
         let ex = gtk::Expander::new(Some(tr("Tags")));
         ex.add_css_class("ka-expansor");
-        let inner = vbox(10, "");
-        inner.set_margin_top(10);
+        let inner = vbox(16, "");
+        inner.set_margin_top(12);
         let sub = Cx { insp: cx.insp.clone(), id: cx.id, body: inner.clone(), b: cx.b.clone() };
         for (t, k) in [
             (n_("Title"), "tag_title"),
