@@ -48,5 +48,6 @@
  "{name} (copy)": "{name} (cópia)",
  "“{name}” does not take stereo audio": "“{name}” não aceita áudio estéreo",
  "“{name}” needs a recording, and there is none yet": "“{name}” precisa de uma gravação, e ainda não há nenhuma",
- "“{name}” stopped with an error: {err}": "“{name}” parou com um erro: {err}"
+ "“{name}” stopped with an error: {err}": "“{name}” parou com um erro: {err}",
+ "This would play the computer’s sound again on top of itself": "Isso tocaria o som do computador de novo por cima dele mesmo"
 }

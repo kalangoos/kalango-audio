@@ -122,7 +122,7 @@ pub fn insert_spot(from: (f32, f32), at: (f32, f32)) -> (f32, f32) {
 pub fn auto_link(s: &Session, new: u64) -> Option<(u64, u64)> {
     let nb = s.block(new)?;
     let d = |b: &Block| ((b.x - nb.x).powi(2) + (b.y - nb.y).powi(2)).sqrt();
-    let ends = |k: &str| matches!(k, "rtmp_stream" | "radio_stream");
+    let ends = is_end;
     if is_source(&nb.kind) {
         let to = s.blocks.iter().filter(|b| b.id != new && b.x > nb.x && !is_source(&b.kind)).min_by(|a, b| d(a).total_cmp(&d(b)))?;
         Some((new, to.id))
@@ -139,6 +139,207 @@ pub fn fit_zoom(content: (f64, f64), avail: (f64, f64), margin: f64) -> f64 {
     }
     let z = ((avail.0 - 2.0 * margin) / content.0).min((avail.1 - 2.0 * margin) / content.1);
     z.clamp(MIN_FIT, 1.0)
+}
+
+// ---------------------------------------------------------------- connecting (pure)
+
+/// Blocks that end a chain: their sound leaves the session (speakers, a stream), so they have no output port.
+pub fn is_end(kind: &str) -> bool {
+    matches!(kind, "device_output" | "rtmp_stream" | "radio_stream")
+}
+
+fn has_output(kind: &str) -> bool {
+    !is_end(kind)
+}
+
+/// Why two blocks cannot be wired (shown near the pointer when a wire is let go there).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Reason {
+    /// from a block to itself
+    Itself,
+    /// into a source (sources make sound, they take none)
+    SourceHasNoInput,
+    /// out of an output (its sound leaves the session)
+    OutputEnds,
+    /// the wire is already there
+    AlreadyFeeds,
+    /// the sound would come back round to where it started
+    Loop,
+    /// one of the blocks is gone
+    Gone,
+}
+
+impl Reason {
+    pub fn text(self) -> &'static str {
+        match self {
+            Reason::Itself => tr("A block can’t feed itself"),
+            Reason::SourceHasNoInput => tr("A source has no input"),
+            Reason::OutputEnds => tr("Outputs don’t send sound on"),
+            Reason::AlreadyFeeds => tr("This block already feeds that one"),
+            Reason::Loop => tr("That would make a loop"),
+            Reason::Gone => tr("That block is gone"),
+        }
+    }
+}
+
+/// Whether sound leaving `from` reaches `to` along the wires (`from` reaches itself).
+pub fn reaches(s: &Session, from: u64, to: u64) -> bool {
+    let mut seen: Vec<u64> = vec![];
+    let mut todo = vec![from];
+    while let Some(id) = todo.pop() {
+        if id == to {
+            return true;
+        }
+        if seen.contains(&id) {
+            continue;
+        }
+        seen.push(id);
+        if let Some(b) = s.block(id) {
+            todo.extend(b.outs.iter().copied());
+        }
+    }
+    false
+}
+
+/// Whether a wire from `from`'s output to `to`'s input is allowed (the engine plays a loop's blocks never, so loops
+/// are refused too).
+pub fn can_connect(s: &Session, from: u64, to: u64) -> Result<(), Reason> {
+    let (Some(a), Some(b)) = (s.block(from), s.block(to)) else { return Err(Reason::Gone) };
+    if from == to {
+        return Err(Reason::Itself);
+    }
+    if is_end(&a.kind) {
+        return Err(Reason::OutputEnds);
+    }
+    if is_source(&b.kind) {
+        return Err(Reason::SourceHasNoInput);
+    }
+    if a.outs.contains(&to) {
+        return Err(Reason::AlreadyFeeds);
+    }
+    if reaches(s, to, from) {
+        return Err(Reason::Loop);
+    }
+    Ok(())
+}
+
+/// The two ports of a block: the input on the left edge, the output on the right edge.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Side {
+    In,
+    Out,
+}
+
+/// A block as the hit tests see it: id, top-left corner (px) and kind.
+pub type Spot<'a> = (u64, f64, f64, &'a str);
+
+fn port_pos(b: &Spot, side: Side) -> Option<(f64, f64)> {
+    match side {
+        Side::In if !is_source(b.3) => Some(in_port(b.1, b.2)),
+        Side::Out if has_output(b.3) => Some(out_port(b.1, b.2)),
+        _ => None,
+    }
+}
+
+/// The port closest to `p` within `reach` px (both sides; a source has no input, an output no output).
+pub fn port_hit(blocks: &[Spot], p: (f64, f64), reach: f64) -> Option<(u64, Side)> {
+    let mut best: Option<((u64, Side), f64)> = None;
+    for b in blocks {
+        for side in [Side::In, Side::Out] {
+            if let Some(q) = port_pos(b, side) {
+                let d = (p.0 - q.0).hypot(p.1 - q.1);
+                if d <= reach && best.map(|x| d < x.1).unwrap_or(true) {
+                    best = Some(((b.0, side), d));
+                }
+            }
+        }
+    }
+    best.map(|b| b.0)
+}
+
+/// The block a wire being dragged would go to: the one whose `want` port is closest to `p` within `reach`, otherwise
+/// the top-most card under `p` (any block: the rules then say whether it may be wired).
+pub fn target_at(blocks: &[Spot], p: (f64, f64), reach: f64, want: Side) -> Option<u64> {
+    let mut best: Option<(u64, f64)> = None;
+    for b in blocks {
+        if let Some(q) = port_pos(b, want) {
+            let d = (p.0 - q.0).hypot(p.1 - q.1);
+            if d <= reach && best.map(|x| d < x.1).unwrap_or(true) {
+                best = Some((b.0, d));
+            }
+        }
+    }
+    best.map(|b| b.0).or_else(|| blocks.iter().rev().find(|b| p.0 >= b.1 && p.0 <= b.1 + BW && p.1 >= b.2 && p.1 <= b.2 + BH).map(|b| b.0))
+}
+
+/// The wire a drag makes: dragging from an output feeds the target, dragging from an input is fed by it.
+pub fn wire_between(start: u64, side: Side, target: u64) -> (u64, u64) {
+    match side {
+        Side::Out => (start, target),
+        Side::In => (target, start),
+    }
+}
+
+/// The first part (0..t) of a bézier, as a bézier (de Casteljau): a wire growing or retracting.
+pub fn bezier_head(c: &[(f64, f64); 4], t: f64) -> [(f64, f64); 4] {
+    let l = |a: (f64, f64), b: (f64, f64)| (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t);
+    let (p01, p12, p23) = (l(c[0], c[1]), l(c[1], c[2]), l(c[2], c[3]));
+    let (p012, p123) = (l(p01, p12), l(p12, p23));
+    [c[0], p01, p012, l(p012, p123)]
+}
+
+/// The wires automatic wiring would add when it is switched back on: every block that takes sound and has no input
+/// is fed by the closest block on its left, then every source that feeds nothing feeds the closest block on its
+/// right. Existing wires are never touched; nothing that the rules refuse (loops, ends) is proposed.
+pub fn rewire_plan(s: &Session) -> Vec<(u64, u64)> {
+    let mut work = s.clone();
+    let mut plan = vec![];
+    let d = |a: &Block, b: &Block| ((a.x - b.x).powi(2) + (a.y - b.y).powi(2)).sqrt();
+    let mut order: Vec<Block> = s.blocks.clone();
+    order.sort_by(|a, b| a.x.total_cmp(&b.x).then(a.y.total_cmp(&b.y)));
+    for b in order.iter().filter(|b| !is_source(&b.kind)) {
+        if work.blocks.iter().any(|u| u.outs.contains(&b.id)) {
+            continue;
+        }
+        let mut left: Vec<&Block> = order.iter().filter(|u| u.x < b.x && has_output(&u.kind)).collect();
+        left.sort_by(|u, v| d(u, b).total_cmp(&d(v, b)));
+        if let Some(u) = left.into_iter().find(|u| can_connect(&work, u.id, b.id).is_ok()) {
+            work.connect(u.id, b.id);
+            plan.push((u.id, b.id));
+        }
+    }
+    for b in order.iter().filter(|b| is_source(&b.kind)) {
+        if work.block(b.id).map(|w| !w.outs.is_empty()).unwrap_or(true) {
+            continue;
+        }
+        let mut right: Vec<&Block> = order.iter().filter(|v| v.x > b.x && !is_source(&v.kind)).collect();
+        right.sort_by(|u, v| d(u, b).total_cmp(&d(v, b)));
+        if let Some(v) = right.into_iter().find(|v| can_connect(&work, b.id, v.id).is_ok()) {
+            work.connect(b.id, v.id);
+            plan.push((b.id, v.id));
+        }
+    }
+    plan
+}
+
+/// How a wire looks: its colour token and opacity, and how fast (px/s) the pulses run along it (None: no pulses).
+/// Stopped, or fed by a source that is off: a grey still wire. Running: the opacity follows the level that passes
+/// (0..1 on the meters' 60 dB scale); silence is a faint still wire; with sound the pulses run faster when louder,
+/// unless the person asked for reduced motion.
+pub fn wire_look(running: bool, source_off: bool, level: f32, reduced: bool) -> (&'static str, f64, Option<f64>) {
+    if !running || source_off {
+        return ("divider", 1.0, None);
+    }
+    let l = (level as f64).clamp(0.0, 1.0);
+    if l < 0.05 {
+        return ("accent", 0.3, None);
+    }
+    let alpha = 0.4 + 0.6 * l;
+    if reduced {
+        ("accent", alpha, None)
+    } else {
+        ("accent", alpha, Some(24.0 + 156.0 * l))
+    }
 }
 
 // ---------------------------------------------------------------- the canvas
@@ -158,6 +359,8 @@ struct View {
     error: gtk::Label,
     power: gtk::Button,
     power_icon: gtk::Image,
+    /// "Echo risk": an output that would play the computer's sound back into it
+    warn: gtk::Label,
     /// what the texts show now, to set them only when they change
     shown: String,
 }
@@ -165,8 +368,19 @@ struct View {
 enum Gest {
     None,
     Move { id: u64, from: (f64, f64), moved: bool },
-    Wire { from: u64, at: (f64, f64) },
+    /// a wire pulled out of a port (`side` of block `from`); `at` is the pointer (screen px)
+    Wire { from: u64, side: Side, at: (f64, f64) },
     Pan { from: (f64, f64), moved: bool, wire: Option<(u64, u64)> },
+}
+
+/// A wire growing out of its output port (new) or retracting into it (removed).
+struct WireAnim {
+    wire: (u64, u64),
+    /// 0..1: how much of the wire is drawn
+    p: Mola,
+    gone: bool,
+    /// the ends (canvas px) when it was removed (its blocks may be gone too)
+    ends: ((f64, f64), (f64, f64)),
 }
 
 pub struct Canvas {
@@ -190,8 +404,22 @@ pub struct Canvas {
     drop_wire: Cell<Option<(u64, u64)>>,
     /// a block that just arrived starts here (px) and springs to its place
     spawn: RefCell<Option<(u64, (f64, f64))>>,
-    phase: Cell<f64>,
     animating: Cell<bool>,
+    /// the wire under the pointer (it shows the × that removes it)
+    hover_wire: Cell<Option<(u64, u64)>>,
+    /// the loose end of a wire being dragged (canvas px): it follows the pointer and springs onto a port
+    wire_end: RefCell<(Mola, Mola)>,
+    /// wires growing (new) or retracting (removed)
+    anims: RefCell<Vec<WireAnim>>,
+    /// the wires of the session as last seen (session uid, wires), to tell which ones are new or gone
+    seen: RefCell<(u64, Vec<(u64, u64)>)>,
+    /// how far (px) the pulses of each wire have run, and the frame time of the last step (µs)
+    flow: RefCell<std::collections::HashMap<(u64, u64), f64>>,
+    flow_time: Cell<i64>,
+    /// the outputs that would play the computer's sound back into it
+    risky: RefCell<Vec<u64>>,
+    /// bumps when the tip near the pointer is shown, so an older timeout does not hide a newer tip
+    tip_gen: Rc<Cell<u32>>,
     zoom_label: gtk::Label,
     pill: gtk::Box,
     status: gtk::Box,
@@ -203,8 +431,8 @@ pub struct Canvas {
     banner_text: gtk::Label,
     banner_button: gtk::Button,
     banner_icon: gtk::Image,
-    /// the banner's block and whether its trouble is access (Allow…) or the device (choose another)
-    banner_for: Cell<(u64, bool)>,
+    /// the banner's block and what its button does
+    banner_for: Cell<(u64, BannerFix)>,
     tip: gtk::Label,
     hint: gtk::Label,
     /// called when a block is pressed (the editor reopens a closed sheet)
@@ -332,8 +560,15 @@ impl Canvas {
             drop_at: Cell::new(None),
             drop_wire: Cell::new(None),
             spawn: RefCell::new(None),
-            phase: Cell::new(0.0),
             animating: Cell::new(false),
+            hover_wire: Cell::new(None),
+            wire_end: RefCell::new((Mola::new(0.0), Mola::new(0.0))),
+            anims: RefCell::new(vec![]),
+            seen: RefCell::new((0, vec![])),
+            flow: RefCell::new(Default::default()),
+            flow_time: Cell::new(0),
+            risky: RefCell::new(vec![]),
+            tip_gen: Rc::new(Cell::new(0)),
             zoom_label,
             pill,
             status,
@@ -345,7 +580,7 @@ impl Canvas {
             banner_text,
             banner_button: allow,
             banner_icon,
-            banner_for: Cell::new((0, true)),
+            banner_for: Cell::new((0, BannerFix::Device)),
             tip,
             hint,
             on_press: RefCell::new(None),
@@ -400,12 +635,27 @@ impl Canvas {
             let w = Rc::downgrade(&cv);
             cv.banner_button.connect_clicked(move |b| {
                 let Some(c) = w.upgrade() else { return };
-                let (id, access) = c.banner_for.get();
-                if access {
-                    open_privacy(b);
-                } else {
-                    c.ui.core.borrow_mut().sel = Some(id);
-                    c.ui.changed(Change::Selection);
+                let (id, fix) = c.banner_for.get();
+                match fix {
+                    BannerFix::Access => open_privacy(b),
+                    BannerFix::Device => {
+                        c.ui.core.borrow_mut().sel = Some(id);
+                        c.ui.changed(Change::Selection);
+                    }
+                    BannerFix::Echo => {
+                        // take the outputs out of the loop (Ctrl+Z puts them back)
+                        let outs = c.risky.borrow().clone();
+                        {
+                            let mut core = c.ui.core.borrow_mut();
+                            core.checkpoint();
+                            for o in outs {
+                                core.remove_block_smart(o);
+                            }
+                            core.checkpoint();
+                        }
+                        c.ui.changed(Change::Sessions);
+                        c.ui.changed(Change::Selection);
+                    }
                 }
             });
         }
@@ -445,31 +695,59 @@ impl Canvas {
         self.views.borrow().iter().rev().find(|v| p.0 >= v.x.x && p.0 <= v.x.x + BW && p.1 >= v.y.x && p.1 <= v.y.x + BH).map(|v| v.id)
     }
 
-    fn port_at(&self, p: (f64, f64)) -> Option<u64> {
-        let reach = 10.0 / self.zoom.get().max(0.3);
-        self.views
-            .borrow()
-            .iter()
-            .filter(|v| has_output(&v.kind))
-            .find(|v| {
-                let o = out_port(v.x.x, v.y.x);
-                (p.0 - o.0).hypot(p.1 - o.1) <= reach
-            })
-            .map(|v| v.id)
+    /// The blocks as drawn now, for the hit tests (last = top-most).
+    fn spots(&self) -> Vec<(u64, f64, f64, String)> {
+        self.views.borrow().iter().map(|v| (v.id, v.x.x, v.y.x, v.kind.clone())).collect()
     }
 
-    /// The block whose input is at (or whose card covers) `p`.
-    fn input_at(&self, p: (f64, f64), not: u64) -> Option<u64> {
-        let reach = 14.0 / self.zoom.get().max(0.3);
+    /// The port under `p` (canvas px): a generous 12 screen px around the dot, so the press does not have to land
+    /// on the dot itself.
+    fn port_at(&self, p: (f64, f64)) -> Option<(u64, Side)> {
+        let spots = self.spots();
+        let list: Vec<Spot> = spots.iter().map(|s| (s.0, s.1, s.2, s.3.as_str())).collect();
+        port_hit(&list, p, 12.0 / self.zoom.get().max(0.3))
+    }
+
+    /// Where the wire being dragged from (`from`, `side`) would go if let go at `p` (canvas px), and whether it may.
+    fn wire_target(&self, from: u64, side: Side, p: (f64, f64)) -> Option<(u64, Result<(), Reason>)> {
+        let spots = self.spots();
+        let list: Vec<Spot> = spots.iter().map(|s| (s.0, s.1, s.2, s.3.as_str())).collect();
+        let want = if side == Side::Out { Side::In } else { Side::Out };
+        let t = target_at(&list, p, 24.0 / self.zoom.get().max(0.3), want)?;
+        let c = self.ui.core.try_borrow().ok()?;
+        let s = c.session()?;
+        let (a, b) = wire_between(from, side, t);
+        Some((t, can_connect(s, a, b)))
+    }
+
+    /// The (canvas px) position of a block's port as drawn now.
+    fn port_pos(&self, id: u64, side: Side) -> Option<(f64, f64)> {
         let views = self.views.borrow();
-        views
-            .iter()
-            .filter(|v| v.id != not && !is_source(&v.kind))
-            .find(|v| {
-                let i = in_port(v.x.x, v.y.x);
-                (p.0 - i.0).hypot(p.1 - i.1) <= reach || (p.0 >= v.x.x && p.0 <= v.x.x + BW && p.1 >= v.y.x && p.1 <= v.y.x + BH)
-            })
-            .map(|v| v.id)
+        let v = views.iter().find(|v| v.id == id)?;
+        Some(if side == Side::Out { out_port(v.x.x, v.y.x) } else { in_port(v.x.x, v.y.x) })
+    }
+
+    /// The small tip near the pointer (screen px); with `secs` it hides by itself.
+    fn show_tip(&self, text: &str, at: (f64, f64), secs: Option<u32>) {
+        self.tip.set_text(text);
+        self.tip.set_margin_start((at.0 + 14.0).max(8.0) as i32);
+        self.tip.set_margin_top((at.1 + 18.0).max(8.0) as i32);
+        self.tip.set_visible(true);
+        let g = self.tip_gen.get().wrapping_add(1);
+        self.tip_gen.set(g);
+        if let Some(secs) = secs {
+            let (tip, gen) = (self.tip.clone(), self.tip_gen.clone());
+            glib::timeout_add_local_once(std::time::Duration::from_millis(secs as u64 * 800), move || {
+                if gen.get() == g {
+                    tip.set_visible(false);
+                }
+            });
+        }
+    }
+
+    fn hide_tip(&self) {
+        self.tip_gen.set(self.tip_gen.get().wrapping_add(1));
+        self.tip.set_visible(false);
     }
 
     fn place(&self) {
@@ -558,6 +836,7 @@ impl Canvas {
                 None => (0, vec![]),
             }
         };
+        let wires_moving = self.diff_wires(uid, &blocks);
         if uid != self.uid.get() {
             for v in self.views.borrow_mut().drain(..) {
                 self.fixed.remove(&v.card);
@@ -617,9 +896,45 @@ impl Canvas {
         } else {
             self.place();
         }
-        if moving {
+        if moving || wires_moving {
             self.animate();
         }
+    }
+
+    /// New wires grow out of their output port (suave); removed ones retract into it (rápida). Whatever made them
+    /// (a drag, automatic wiring, undo, a block dropped on a wire) looks the same. Returns whether anything moves.
+    fn diff_wires(&self, uid: u64, blocks: &[Block]) -> bool {
+        let wires: Vec<(u64, u64)> = blocks.iter().flat_map(|b| b.outs.iter().map(move |o| (b.id, *o))).collect();
+        let mut seen = self.seen.borrow_mut();
+        let mut anims = self.anims.borrow_mut();
+        if seen.0 != uid {
+            anims.clear();
+            *seen = (uid, wires);
+            return false;
+        }
+        let reduced = mov::reduzido();
+        let mut any = false;
+        for w in wires.iter().filter(|w| !seen.1.contains(w)) {
+            anims.retain(|a| a.wire != *w);
+            if !reduced {
+                let mut p = Mola::new(0.0);
+                p.ir(1.0, mov::SUAVE);
+                anims.push(WireAnim { wire: *w, p, gone: false, ends: ((0.0, 0.0), (0.0, 0.0)) });
+                any = true;
+            }
+        }
+        for w in seen.1.iter().filter(|w| !wires.contains(w)) {
+            anims.retain(|a| a.wire != *w);
+            let (Some(a), Some(b)) = (self.port_pos(w.0, Side::Out), self.port_pos(w.1, Side::In)) else { continue };
+            if !reduced {
+                let mut p = Mola::new(1.0);
+                p.ir(0.0, mov::RAPIDA);
+                anims.push(WireAnim { wire: *w, p, gone: true, ends: (a, b) });
+                any = true;
+            }
+        }
+        seen.1 = wires;
+        any
     }
 
     fn build_view(&self, b: &Block) -> View {
@@ -673,6 +988,10 @@ impl Canvas {
         }
         follow_theme(&gr);
         status_row.append(&gr);
+        let warn = chip(tr("Echo risk"), "red");
+        warn.set_tooltip_text(Some(tr("This would play the computer’s sound again on top of itself")));
+        warn.set_visible(false);
+        status_row.append(&warn);
         card.append(&status_row);
         let fill = gtk::Box::new(gtk::Orientation::Vertical, 0);
         fill.set_vexpand(true);
@@ -699,6 +1018,7 @@ impl Canvas {
             error,
             power,
             power_icon,
+            warn,
             shown: String::new(),
         }
     }
@@ -710,6 +1030,8 @@ impl Canvas {
         let Some(s) = c.session() else { return };
         let uid = s.uid;
         let running = c.is_running(uid);
+        let risky = crate::core::feedback_outputs(s);
+        *self.risky.borrow_mut() = risky.clone();
         let mut first_error: Option<(u64, String, String, Trouble)> = None;
         for v in self.views.borrow_mut().iter_mut() {
             let Some(b) = s.block(v.id) else { continue };
@@ -723,7 +1045,8 @@ impl Canvas {
             let (dot_on, status) = editor::status_line(b, running, rec.as_ref(), &c);
             let gr = matches!(b.kind.as_str(), "compressor" | "loudness");
             let t = err.as_ref().map(|e| e.1);
-            let key = format!("{sum}|{status}|{dot_on}|{}|{selected}|{:?}", b.enabled, t);
+            let echo = risky.contains(&b.id);
+            let key = format!("{sum}|{status}|{dot_on}|{}|{selected}|{:?}|{echo}", b.enabled, t);
             if let Some((e, t)) = &err {
                 if first_error.is_none() && *t != Trouble::Waiting {
                     first_error = Some((b.id, b.kind.clone(), e.clone(), *t));
@@ -748,7 +1071,8 @@ impl Canvas {
             v.status.set_text(&status);
             v.status_dot.set_visible(dot_on);
             v.gr.set_visible(gr);
-            v.status_row.set_visible(!status.is_empty() || gr);
+            v.warn.set_visible(echo);
+            v.status_row.set_visible(!status.is_empty() || gr || echo);
             v.error.set_visible(bad);
             v.meter.set_visible(!bad);
             set_class(&v.card, "selecionado", selected);
@@ -770,16 +1094,27 @@ impl Canvas {
                 self.banner_title.set_text(title);
                 let detail = if *t == Trouble::Access { trf("KalangoOS is not letting Kalango Audio use it ({err}).", &[("err", e.clone())]) } else { e.clone() };
                 self.banner_text.set_text(&detail);
-                self.banner_for.set((*id, *t == Trouble::Access));
+                self.banner_for.set((*id, if *t == Trouble::Access { BannerFix::Access } else { BannerFix::Device }));
                 icons::set(&self.banner_icon, if kind == "device_input" { "microfone" } else if *t == Trouble::Access { "volume" } else { "alerta" }, "red", 16);
                 if let Some(l) = self.banner_button.child().and_then(|r| r.last_child()).and_downcast::<gtk::Label>() {
                     l.set_text(if *t == Trouble::Access { tr("Allow…") } else { tr("Choose a device") });
                 }
                 self.banner.set_visible(true);
             }
+            None if !risky.is_empty() && !running => {
+                // the layout would echo: say so before the person presses Start (which refuses it)
+                self.banner_title.set_text(tr("This would play the computer’s sound again on top of itself"));
+                self.banner_text.set_text(tr("The computer’s sound already includes what this output plays. Listen on headphones of another device, or remove the output."));
+                self.banner_for.set((risky[0], BannerFix::Echo));
+                icons::set(&self.banner_icon, "alerta", "red", 16);
+                if let Some(l) = self.banner_button.child().and_then(|r| r.last_child()).and_downcast::<gtk::Label>() {
+                    l.set_text(tr("Remove the output"));
+                }
+                self.banner.set_visible(true);
+            }
             None => self.banner.set_visible(false),
         }
-        self.hint.set_visible(s.manual && first_error.is_none());
+        self.hint.set_visible(s.manual && !self.banner.is_visible());
         // status
         let rate = if s.sample_rate == 0 { 48000 } else { s.sample_rate };
         let khz = format!("{} kHz", format!("{:.1}", rate as f64 / 1000.0).trim_end_matches(".0").replace('.', ","));
@@ -792,15 +1127,41 @@ impl Canvas {
         self.wiring.set_tooltip_text(Some(tr("Click to switch between automatic and manual wiring")));
     }
 
-    /// Every frame while the editor shows: meters and the dashes running along the wires.
+    /// Every tick while the editor shows (about 30 a second): the meters, and the pulses that run along the wires
+    /// at a speed that follows each wire's level. Stopped, nothing is redrawn.
     pub fn tick(&self, running: bool) {
-        if running {
-            for v in self.views.borrow().iter() {
-                v.meter.queue_draw();
+        if !running {
+            // just stopped: one last draw turns the wires grey and still
+            if self.flow_time.replace(0) != 0 {
+                self.below.queue_draw();
             }
-            self.phase.set((self.phase.get() + 1.0) % 1200.0);
-            self.below.queue_draw();
+            return;
         }
+        for v in self.views.borrow().iter() {
+            v.meter.queue_draw();
+        }
+        let now = glib::monotonic_time();
+        let dt = if self.flow_time.get() == 0 { 0.0 } else { ((now - self.flow_time.get()) as f64 / 1e6).clamp(0.0, 0.1) };
+        self.flow_time.set(now);
+        let reduced = mov::reduzido();
+        {
+            let Ok(c) = self.ui.core.try_borrow() else { return };
+            let Some(s) = c.session() else { return };
+            let mut flow = self.flow.borrow_mut();
+            flow.retain(|w, _| s.block(w.0).map(|b| b.outs.contains(&w.1)).unwrap_or(false));
+            for b in &s.blocks {
+                let level = c.disp.get(&(s.uid, b.id)).map(|d| d.peak_max()).unwrap_or(0.0);
+                let off = !b.enabled && is_source(&b.kind);
+                if let (_, _, Some(speed)) = wire_look(true, off, level, reduced) {
+                    for o in &b.outs {
+                        // the pattern repeats every 32 px: keep the number small
+                        let x = flow.entry((b.id, *o)).or_insert(0.0);
+                        *x = (*x + speed * dt) % 32.0;
+                    }
+                }
+            }
+        }
+        self.below.queue_draw();
     }
 
     fn animate(self: &Rc<Self>) {
@@ -823,6 +1184,22 @@ impl Canvas {
                     v.y.passo(dt);
                 }
                 all &= v.x.parada() && v.y.parada();
+            }
+            {
+                let mut e = c.wire_end.borrow_mut();
+                if !e.0.parada() || !e.1.parada() {
+                    e.0.passo(dt);
+                    e.1.passo(dt);
+                    all = false;
+                }
+            }
+            {
+                let mut anims = c.anims.borrow_mut();
+                for a in anims.iter_mut() {
+                    a.p.passo(dt);
+                }
+                anims.retain(|a| !(a.p.parada() && (a.gone || a.p.x >= 0.999)));
+                all &= anims.is_empty();
             }
             c.place();
             if all {
@@ -856,79 +1233,180 @@ impl Canvas {
             let _ = cr.fill();
         }
         // wires
-        let (running, enabled): (bool, Vec<(u64, bool, f32)>) = {
+        let (running, state): (bool, Vec<(u64, bool, f32)>) = {
             let Ok(c) = self.ui.core.try_borrow() else { return };
             let Some(s) = c.session() else { return };
             let uid = s.uid;
-            (c.is_running(uid), s.blocks.iter().map(|b| (b.id, b.enabled, c.disp.get(&(uid, b.id)).map(|d| d.peak_max()).unwrap_or(0.0))).collect())
+            let state = s
+                .blocks
+                .iter()
+                .map(|b| (b.id, !b.enabled && is_source(&b.kind), c.disp.get(&(uid, b.id)).map(|d| d.peak_max()).unwrap_or(0.0)))
+                .collect();
+            (c.is_running(uid), state)
         };
+        let reduced = mov::reduzido();
+        let risky = self.risky.borrow().clone();
         let geo = self.geometry();
         let pos = |id: u64| geo.iter().find(|b| b.0 == id).map(|b| (b.1, b.2));
+        let anims = self.anims.borrow();
+        let flow = self.flow.borrow();
         cr.set_line_cap(gtk::cairo::LineCap::Round);
+        let stroke = |cr: &gtk::cairo::Context, c: &[(f64, f64); 4]| {
+            cr.new_path();
+            cr.move_to(c[0].0, c[0].1);
+            cr.curve_to(c[1].0, c[1].1, c[2].0, c[2].1, c[3].0, c[3].1);
+        };
         for (id, x, y, outs) in &geo {
-            let (on, level) = enabled.iter().find(|e| e.0 == *id).map(|e| (e.1, e.2)).unwrap_or((true, 0.0));
+            let (off, level) = state.iter().find(|e| e.0 == *id).map(|e| (e.1, e.2)).unwrap_or((false, 0.0));
             for o in outs {
                 let Some((ox, oy)) = pos(*o) else { continue };
-                let a = self.to_screen(out_port(*x, *y));
-                let b = self.to_screen(in_port(ox, oy));
-                let c = wire_curve(a, b);
-                let hot = self.drop_wire.get() == Some((*id, *o)) || self.wire_sel.get() == Some((*id, *o));
-                cr.new_path();
-                cr.move_to(c[0].0, c[0].1);
-                cr.curve_to(c[1].0, c[1].1, c[2].0, c[2].1, c[3].0, c[3].1);
-                let live = running && on;
-                theme::source(cr, if live || hot { "accent" } else { "divider" }, 1.0);
-                cr.set_line_width(if hot { 3.0 } else { 2.0 });
-                let _ = cr.stroke_preserve();
-                if live && level > 0.01 {
-                    // the signal runs along the wire, faster when louder
-                    theme::source(cr, "realce", 0.55);
+                let w = (*id, *o);
+                let mut c = wire_curve(self.to_screen(out_port(*x, *y)), self.to_screen(in_port(ox, oy)));
+                // a new wire grows from its output
+                if let Some(a) = anims.iter().find(|a| a.wire == w && !a.gone) {
+                    c = bezier_head(&c, a.p.x.clamp(0.0, 1.0));
+                }
+                let hot = self.drop_wire.get() == Some(w) || self.wire_sel.get() == Some(w) || self.hover_wire.get() == Some(w);
+                let (tok, alpha, pulses) = wire_look(running, off, level, reduced);
+                // a wire that would carry the computer's sound back into it is marked in red
+                let tok = if risky.contains(o) && !running { "red" } else { tok };
+                stroke(cr, &c);
+                if hot {
+                    theme::source(cr, "accent", 1.0);
+                    cr.set_line_width(3.0);
+                } else {
+                    theme::source(cr, tok, alpha);
                     cr.set_line_width(2.0);
-                    cr.set_dash(&[3.0, 9.0], -self.phase.get() * (0.6 + 2.4 * level as f64));
-                    let _ = cr.stroke_preserve();
+                }
+                let _ = cr.stroke();
+                if let Some(_speed) = pulses {
+                    // short bright pulses run from the output to the input
+                    let run = flow.get(&w).copied().unwrap_or(0.0);
+                    stroke(cr, &c);
+                    // a lighter streak on the accent wire (realce: white in the dark theme, black in the light one)
+                    theme::source(cr, "realce", (0.3 + 0.5 * level as f64).min(0.8));
+                    cr.set_line_width(2.5);
+                    cr.set_dash(&[10.0, 22.0], -run);
+                    let _ = cr.stroke();
                     cr.set_dash(&[], 0.0);
                 }
-                cr.new_path();
             }
+        }
+        // removed wires retract into their output and fade
+        for a in anims.iter().filter(|a| a.gone) {
+            let t = a.p.x.clamp(0.0, 1.0);
+            let c = bezier_head(&wire_curve(self.to_screen(a.ends.0), self.to_screen(a.ends.1)), t);
+            stroke(cr, &c);
+            theme::source(cr, "accent", t);
+            cr.set_line_width(2.0);
+            let _ = cr.stroke();
         }
     }
 
     fn draw_above(&self, cr: &gtk::cairo::Context) {
         let z = self.zoom.get();
         let r = PORT_R * z.clamp(0.75, 1.5);
+        // while a wire is dragged: which ports may take it (accent ring) and which may not (dimmed)
+        let drag = match &*self.gest.borrow() {
+            Gest::Wire { from, side, at } => Some((*from, *side, *at)),
+            _ => None,
+        };
+        let verdicts: Vec<(u64, bool)> = match drag {
+            Some((from, side, _)) => {
+                let Ok(c) = self.ui.core.try_borrow() else { return };
+                let Some(s) = c.session() else { return };
+                s.blocks
+                    .iter()
+                    .map(|b| {
+                        let (a, t) = wire_between(from, side, b.id);
+                        (b.id, can_connect(s, a, t).is_ok())
+                    })
+                    .collect()
+            }
+            None => vec![],
+        };
+        let target = drag.and_then(|(from, side, at)| self.wire_target(from, side, self.to_canvas(at)));
         for v in self.views.borrow().iter() {
             let tok = kind_token(&v.kind);
-            if !is_source(&v.kind) {
-                let p = self.to_screen(in_port(v.x.x, v.y.x));
+            for side in [Side::In, Side::Out] {
+                let has = if side == Side::In { !is_source(&v.kind) } else { has_output(&v.kind) };
+                if !has {
+                    continue;
+                }
+                let p = self.to_screen(if side == Side::In { in_port(v.x.x, v.y.x) } else { out_port(v.x.x, v.y.x) });
+                // the ports a drag could end on are on the other side; the one it started from stays lit
+                let (mut alpha, mut ring) = (1.0, false);
+                if let Some((from, fside, _)) = drag {
+                    let start = v.id == from && side == fside;
+                    let ok = side != fside && verdicts.iter().any(|x| x.0 == v.id && x.1);
+                    if !start {
+                        if ok {
+                            ring = true;
+                        } else {
+                            alpha = 0.25;
+                        }
+                    }
+                }
+                if ring {
+                    let near = target.map(|t| t.0 == v.id && t.1.is_ok()).unwrap_or(false);
+                    cr.new_path();
+                    cr.arc(p.0, p.1, r * if near { 2.2 } else { 1.8 }, 0.0, std::f64::consts::TAU);
+                    theme::source(cr, "accent", if near { 0.35 } else { 0.18 });
+                    let _ = cr.fill_preserve();
+                    theme::source(cr, "accent", 1.0);
+                    cr.set_line_width(1.5);
+                    let _ = cr.stroke();
+                }
                 cr.new_path();
                 cr.arc(p.0, p.1, r, 0.0, std::f64::consts::TAU);
-                theme::source(cr, "bg", 1.0);
-                let _ = cr.fill_preserve();
-                theme::source(cr, tok, 1.0);
-                cr.set_line_width(1.5);
-                let _ = cr.stroke();
-            }
-            if has_output(&v.kind) {
-                let p = self.to_screen(out_port(v.x.x, v.y.x));
-                cr.new_path();
-                cr.arc(p.0, p.1, r, 0.0, std::f64::consts::TAU);
-                theme::source(cr, tok, 1.0);
-                let _ = cr.fill();
+                if side == Side::In {
+                    theme::source(cr, "bg", alpha);
+                    let _ = cr.fill_preserve();
+                    theme::source(cr, tok, alpha);
+                    cr.set_line_width(1.5);
+                    let _ = cr.stroke();
+                } else {
+                    theme::source(cr, tok, alpha);
+                    let _ = cr.fill();
+                }
             }
         }
-        // the wire being drawn by hand
-        if let Gest::Wire { from, at } = &*self.gest.borrow() {
-            if let Some(v) = self.views.borrow().iter().find(|v| v.id == *from) {
-                let a = self.to_screen(out_port(v.x.x, v.y.x));
-                let c = wire_curve(a, *at);
+        // the wire being drawn by hand: from its port to the pointer, springing onto a port that takes it
+        if let Some((from, side, _)) = drag {
+            if let Some(p) = self.port_pos(from, side) {
+                let a = self.to_screen(p);
+                let e = self.wire_end.borrow();
+                let b = self.to_screen((e.0.x, e.1.x));
+                let c = if side == Side::Out { wire_curve(a, b) } else { wire_curve(b, a) };
+                let refused = target.map(|t| t.1.is_err()).unwrap_or(false);
                 cr.new_path();
                 cr.move_to(c[0].0, c[0].1);
                 cr.curve_to(c[1].0, c[1].1, c[2].0, c[2].1, c[3].0, c[3].1);
-                theme::source(cr, "accent", 1.0);
+                theme::source(cr, if refused { "muted" } else { "accent" }, 1.0);
                 cr.set_line_width(2.0);
-                cr.set_dash(&[6.0, 4.0], 0.0);
+                if refused {
+                    cr.set_dash(&[6.0, 4.0], 0.0);
+                }
                 let _ = cr.stroke();
                 cr.set_dash(&[], 0.0);
+            }
+        }
+        // the × that removes the wire under the pointer (or the selected one)
+        if drag.is_none() && self.drop_wire.get().is_none() {
+            if let Some(m) = self.remove_button() {
+                rounded(cr, m.0 - 9.0, m.1 - 9.0, 18.0, 18.0, 4.0);
+                theme::source(cr, "raised", 1.0);
+                let _ = cr.fill_preserve();
+                theme::source(cr, "border", 1.0);
+                cr.set_line_width(1.0);
+                let _ = cr.stroke();
+                theme::source(cr, "text2", 1.0);
+                cr.set_line_width(1.5);
+                cr.move_to(m.0 - 3.5, m.1 - 3.5);
+                cr.line_to(m.0 + 3.5, m.1 + 3.5);
+                cr.move_to(m.0 + 3.5, m.1 - 3.5);
+                cr.line_to(m.0 - 3.5, m.1 + 3.5);
+                let _ = cr.stroke();
             }
         }
         // the "+" in the middle of the wire a dragged block would go into
@@ -952,6 +1430,21 @@ impl Canvas {
         }
     }
 
+    /// The wire whose × shows and where the × is (screen px): the hovered wire when it is long enough to be clicked
+    /// elsewhere too, otherwise the selected one (a short wire between close blocks is first selected with a click,
+    /// so a click on it never removes it by surprise).
+    fn remove_target(&self) -> Option<((u64, u64), (f64, f64))> {
+        let ends = |w: (u64, u64)| Some((self.to_screen(self.port_pos(w.0, Side::Out)?), self.to_screen(self.port_pos(w.1, Side::In)?)));
+        let long = |w: (u64, u64)| ends(w).map(|(a, b)| (a.0 - b.0).hypot(a.1 - b.1) >= 90.0).unwrap_or(false);
+        let w = self.hover_wire.get().filter(|w| long(*w)).or(self.wire_sel.get())?;
+        let (a, b) = ends(w)?;
+        Some((w, bezier_at(&wire_curve(a, b), 0.5)))
+    }
+
+    fn remove_button(&self) -> Option<(f64, f64)> {
+        self.remove_target().map(|t| t.1)
+    }
+
     // ------------------------------------------------------------ pointer
 
     fn gestures(self: &Rc<Self>) {
@@ -962,10 +1455,35 @@ impl Canvas {
             drag.connect_drag_begin(move |g, x, y| {
                 let Some(c) = w.upgrade() else { return };
                 c.below.grab_focus();
+                // buttons over the canvas (zoom, the wiring switch, the banner, a card's on/off) keep their clicks:
+                // claiming the press here would cancel them
+                if let Some(w) = c.root.pick(x, y, gtk::PickFlags::DEFAULT) {
+                    if w.is::<gtk::Button>() || w.ancestor(gtk::Button::static_type()).is_some() {
+                        g.set_state(gtk::EventSequenceState::Denied);
+                        return;
+                    }
+                }
                 let p = c.to_canvas((x, y));
-                let manual_ok = true;
-                let gest = if let Some(id) = c.port_at(p).filter(|_| manual_ok) {
-                    Gest::Wire { from: id, at: (x, y) }
+                // the × on a wire removes it
+                if let Some((w, m)) = c.remove_target() {
+                    if (x - m.0).abs() <= 10.0 && (y - m.1).abs() <= 10.0 {
+                        g.set_state(gtk::EventSequenceState::Claimed);
+                        c.hover_wire.set(None);
+                        c.wire_sel.set(Some(w));
+                        c.delete_wire();
+                        return;
+                    }
+                }
+                // a port (either side, in automatic or manual wiring) pulls out a wire
+                let gest = if let Some((id, side)) = c.port_at(p) {
+                    c.wire_sel.set(None);
+                    c.hover_wire.set(None);
+                    if let Some(q) = c.port_pos(id, side) {
+                        let mut e = c.wire_end.borrow_mut();
+                        e.0.pular(q.0);
+                        e.1.pular(q.1);
+                    }
+                    Gest::Wire { from: id, side, at: (x, y) }
                 } else if let Some(id) = c.block_at(p) {
                     let from = c.views.borrow().iter().find(|v| v.id == id).map(|v| (v.x.x, v.y.x)).unwrap_or((0.0, 0.0));
                     c.wire_sel.set(None);
@@ -1022,12 +1540,13 @@ impl Canvas {
                             c.place();
                         }
                     }
-                    Gest::Wire { at, .. } => {
+                    Gest::Wire { from, side, at } => {
                         if let Some((sx, sy)) = g.start_point() {
                             *at = (sx + dx, sy + dy);
                         }
+                        let (from, side, at) = (*from, *side, *at);
                         drop(gest);
-                        c.above.queue_draw();
+                        c.follow_wire(from, side, at);
                     }
                     Gest::Pan { from, moved, .. } => {
                         if dx.hypot(dy) > 3.0 {
@@ -1060,21 +1579,40 @@ impl Canvas {
                                 v.x.ir(ux as f64 * UNIT, mov::ELASTICA);
                                 v.y.ir(uy as f64 * UNIT, mov::ELASTICA);
                             }
+                            c.ui.core.borrow_mut().checkpoint();
                             editor::with_block(&c.ui, id, |b| {
                                 b.x = ux;
                                 b.y = uy;
                             });
+                            c.ui.core.borrow_mut().checkpoint();
                             c.animate();
                             c.ui.changed(Change::Sessions);
                         }
                     }
-                    Gest::Wire { from, .. } => {
-                        let end = g.start_point().map(|(sx, sy)| c.to_canvas((sx + dx, sy + dy)));
-                        if let Some(to) = end.and_then(|p| c.input_at(p, from)) {
-                            if let Some(s) = c.ui.core.borrow_mut().session_mut() {
-                                s.connect(from, to);
+                    Gest::Wire { .. } if dx.hypot(dy) < 4.0 => {
+                        // a click by a port, not a drag: it selects the wire there (close blocks leave little else)
+                        c.hide_tip();
+                        let p = g.start_point().map(|(sx, sy)| c.to_canvas((sx, sy)));
+                        let wire = p.and_then(|p| wire_at(&c.geometry(), p, 6.0 / c.zoom.get()));
+                        c.wire_sel.set(wire);
+                        if wire.is_some() && c.ui.core.borrow().sel.is_some() {
+                            c.ui.core.borrow_mut().sel = None;
+                            c.ui.changed(Change::Selection);
+                        }
+                        c.below.queue_draw();
+                        c.above.queue_draw();
+                    }
+                    Gest::Wire { from, side, .. } => {
+                        let at = g.start_point().map(|(sx, sy)| (sx + dx, sy + dy));
+                        let target = at.and_then(|a| c.wire_target(from, side, c.to_canvas(a)));
+                        match (target, at) {
+                            (Some((t, Ok(()))), _) => {
+                                c.hide_tip();
+                                let (a, b) = wire_between(from, side, t);
+                                c.connect(a, b);
                             }
-                            c.ui.changed(Change::Sessions);
+                            (Some((_, Err(why))), Some(at)) => c.show_tip(why.text(), at, Some(2)),
+                            _ => c.hide_tip(),
                         }
                         c.above.queue_draw();
                     }
@@ -1125,7 +1663,22 @@ impl Canvas {
             let pointer = Rc::new(Cell::new((0.0, 0.0)));
             let motion = gtk::EventControllerMotion::new();
             let p2 = pointer.clone();
-            motion.connect_motion(move |_, x, y| p2.set((x, y)));
+            let w2 = Rc::downgrade(self);
+            motion.connect_motion(move |_, x, y| {
+                p2.set((x, y));
+                if let Some(c) = w2.upgrade() {
+                    c.hover(x, y);
+                }
+            });
+            let w3 = Rc::downgrade(self);
+            motion.connect_leave(move |_| {
+                if let Some(c) = w3.upgrade() {
+                    if c.hover_wire.take().is_some() {
+                        c.below.queue_draw();
+                        c.above.queue_draw();
+                    }
+                }
+            });
             self.root.add_controller(motion);
             scroll.connect_scroll(move |s, dx, dy| {
                 let Some(c) = w.upgrade() else { return glib::Propagation::Proceed };
@@ -1177,11 +1730,85 @@ impl Canvas {
         pop.popup();
     }
 
-    /// Delete: the selected wire if there is one (true), otherwise nothing (the editor removes the block).
+    /// The pointer moved (screen px): the wire under it shows its ×. Over a block or a port, no wire is hovered.
+    fn hover(&self, x: f64, y: f64) {
+        if !matches!(&*self.gest.borrow(), Gest::None) {
+            return;
+        }
+        let p = self.to_canvas((x, y));
+        // keep the × reachable: near it, the wire stays hovered
+        let on_x = self.remove_target().map(|(w, m)| (w, (x - m.0).abs() <= 12.0 && (y - m.1).abs() <= 12.0));
+        // between two close blocks the wire is short and runs between their ports: it is hovered there too
+        let wire = match on_x {
+            Some((w, true)) if self.hover_wire.get() == Some(w) => Some(w),
+            _ if self.block_at(p).is_some() => None,
+            _ => wire_at(&self.geometry(), p, 8.0 / self.zoom.get()),
+        };
+        if wire != self.hover_wire.get() {
+            self.hover_wire.set(wire);
+            self.below.queue_draw();
+            self.above.queue_draw();
+        }
+    }
+
+    /// The loose end of the wire being dragged follows the pointer; over a port that takes it, it springs onto it
+    /// (suave). A refusal is said in a small tip by the pointer.
+    fn follow_wire(self: &Rc<Self>, from: u64, side: Side, at: (f64, f64)) {
+        let target = self.wire_target(from, side, self.to_canvas(at));
+        let want = if side == Side::Out { Side::In } else { Side::Out };
+        let snap = target.and_then(|(t, ok)| ok.ok().and_then(|_| self.port_pos(t, want)));
+        {
+            let mut e = self.wire_end.borrow_mut();
+            match snap {
+                Some(q) => {
+                    e.0.ir(q.0, mov::SUAVE);
+                    e.1.ir(q.1, mov::SUAVE);
+                }
+                None => {
+                    let q = self.to_canvas(at);
+                    if e.0.parada() && e.1.parada() {
+                        e.0.pular(q.0);
+                        e.1.pular(q.1);
+                    } else {
+                        // leaving a port: catch up with the pointer quickly
+                        e.0.ir(q.0, mov::RAPIDA);
+                        e.1.ir(q.1, mov::RAPIDA);
+                    }
+                }
+            }
+        }
+        match target {
+            Some((_, Err(why))) => self.show_tip(why.text(), at, None),
+            _ => self.hide_tip(),
+        }
+        self.animate();
+        self.above.queue_draw();
+    }
+
+    /// Wires `from` → `to` (already checked) as one undo step.
+    fn connect(&self, from: u64, to: u64) {
+        {
+            let mut c = self.ui.core.borrow_mut();
+            c.checkpoint();
+            if let Some(s) = c.session_mut() {
+                s.connect(from, to);
+            }
+            c.checkpoint();
+        }
+        self.ui.changed(Change::Sessions);
+    }
+
+    /// Delete: the selected wire if there is one (true), otherwise nothing (the editor removes the block). One undo
+    /// step: Ctrl+Z puts the wire back.
     pub fn delete_wire(&self) -> bool {
         let Some((a, b)) = self.wire_sel.take() else { return false };
-        if let Some(s) = self.ui.core.borrow_mut().session_mut() {
-            s.disconnect(a, b);
+        {
+            let mut c = self.ui.core.borrow_mut();
+            c.checkpoint();
+            if let Some(s) = c.session_mut() {
+                s.disconnect(a, b);
+            }
+            c.checkpoint();
         }
         self.ui.changed(Change::Sessions);
         true
@@ -1259,6 +1886,7 @@ impl Canvas {
         let mut units = (snap_units(corner.0), snap_units(corner.1));
         let id = {
             let mut c = self.ui.core.borrow_mut();
+            c.checkpoint();
             // in the middle of a wire it goes at least one column right of the block that feeds it
             if let Some(from) = wire.and_then(|(a, _)| c.session().and_then(|s| s.block(a)).map(|b| (b.x, b.y))) {
                 units = insert_spot(from, units);
@@ -1275,11 +1903,12 @@ impl Canvas {
                     }
                 }
                 if wire.is_none() && !s.manual {
-                    if let Some((a, b)) = auto_link(s, id) {
+                    if let Some((a, b)) = auto_link(s, id).filter(|(a, b)| can_connect(s, *a, *b).is_ok()) {
                         s.connect(a, b);
                     }
                 }
             }
+            c.checkpoint();
             id
         };
         if let Some(id) = id {
@@ -1289,6 +1918,17 @@ impl Canvas {
             self.ui.changed(Change::Selection);
         }
     }
+}
+
+/// What the banner's button does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BannerFix {
+    /// open the privacy settings ("Allow…")
+    Access,
+    /// select the block to choose another device
+    Device,
+    /// remove the outputs that would play the computer's sound back into it
+    Echo,
 }
 
 /// What kind of trouble a block's error is.
@@ -1315,10 +1955,6 @@ pub fn trouble(b: &Block, err: &str) -> Trouble {
         "device_input" | "system_sound" | "app_source" => Trouble::Access,
         _ => Trouble::Device,
     }
-}
-
-fn has_output(kind: &str) -> bool {
-    !matches!(kind, "rtmp_stream" | "radio_stream")
 }
 
 fn set_class(w: &impl IsA<gtk::Widget>, class: &str, on: bool) {
@@ -1357,6 +1993,13 @@ pub fn recorder_line(st: &crate::engine::RecStatus) -> String {
     } else {
         state_label(&st.state)
     }
+}
+
+/// A block kind's tile that keeps its size (the glyph inside asks to expand).
+fn ktile(kind: &str, size: i32) -> gtk::Box {
+    let t = kind_tile(kind, size);
+    t.set_hexpand(false);
+    t
 }
 
 #[cfg(test)]
@@ -1435,6 +2078,143 @@ mod tests {
         let _ = far;
     }
 
+    fn chain() -> (Session, u64, u64, u64, u64) {
+        let mut s = Session::new("t");
+        let tone = s.add_block("test_tone", 2.0, 2.0);
+        let vol = s.add_block("volume", 8.0, 2.0);
+        let rec = s.add_block("recorder", 14.0, 2.0);
+        let out = s.add_block("device_output", 14.0, 7.0);
+        s.connect(tone, vol);
+        s.connect(vol, rec);
+        (s, tone, vol, rec, out)
+    }
+
+    #[test]
+    fn the_wiring_rules_say_why_not() {
+        let (s, tone, vol, rec, out) = chain();
+        assert_eq!(can_connect(&s, vol, out), Ok(()));
+        assert_eq!(can_connect(&s, vol, vol), Err(Reason::Itself));
+        assert_eq!(can_connect(&s, vol, tone), Err(Reason::SourceHasNoInput));
+        assert_eq!(can_connect(&s, out, rec), Err(Reason::OutputEnds));
+        assert_eq!(can_connect(&s, tone, vol), Err(Reason::AlreadyFeeds));
+        assert_eq!(can_connect(&s, rec, vol), Err(Reason::Loop), "rec is fed by vol");
+        assert_eq!(can_connect(&s, vol, 99), Err(Reason::Gone));
+        // every reason has its own words
+        let all = [Reason::Itself, Reason::SourceHasNoInput, Reason::OutputEnds, Reason::AlreadyFeeds, Reason::Loop, Reason::Gone];
+        let mut texts: Vec<&str> = all.iter().map(|r| r.text()).collect();
+        texts.dedup();
+        assert_eq!(texts.len(), all.len());
+    }
+
+    #[test]
+    fn loops_are_found_through_any_path() {
+        let (mut s, tone, vol, rec, _) = chain();
+        let eq = s.add_block("graphic_eq", 20.0, 2.0);
+        s.connect(rec, eq);
+        assert!(reaches(&s, tone, eq));
+        assert!(!reaches(&s, eq, tone));
+        assert_eq!(can_connect(&s, eq, vol), Err(Reason::Loop));
+        assert_eq!(can_connect(&s, eq, rec), Err(Reason::Loop));
+    }
+
+    #[test]
+    fn a_deleted_wire_can_be_made_again_or_brought_back_with_undo() {
+        // the person's report: after deleting a wire the same two blocks could not be wired again
+        for manual in [false, true] {
+            let (mut s, tone, vol, _, _) = chain();
+            s.manual = manual;
+            let mut app = crate::core::Core::ephemeral(vec![s]);
+            app.checkpoint();
+            app.session_mut().unwrap().disconnect(tone, vol);
+            app.checkpoint();
+            assert_eq!(can_connect(app.session().unwrap(), tone, vol), Ok(()), "manual {manual}");
+            // Ctrl+Z puts it back at once (no half second of quiet needed)
+            app.undo();
+            assert_eq!(app.session().unwrap().block(tone).unwrap().outs, vec![vol]);
+            // and again by hand after undoing the undo
+            app.redo();
+            assert!(app.session().unwrap().block(tone).unwrap().outs.is_empty());
+            app.checkpoint();
+            app.session_mut().unwrap().connect(tone, vol);
+            app.checkpoint();
+            assert_eq!(app.session().unwrap().block(tone).unwrap().outs, vec![vol]);
+        }
+    }
+
+    #[test]
+    fn ports_are_hit_on_both_sides_with_some_room() {
+        let blocks: Vec<Spot> = vec![(1, 0.0, 0.0, "test_tone"), (2, 204.0, 0.0, "volume"), (3, 408.0, 0.0, "device_output")];
+        let y = BH / 2.0;
+        // the output of the tone, a few px off the dot
+        assert_eq!(port_hit(&blocks, (BW - 6.0, y + 4.0), 12.0), Some((1, Side::Out)));
+        // the input of the volume, from inside its card
+        assert_eq!(port_hit(&blocks, (204.0 + 5.0, y), 12.0), Some((2, Side::In)));
+        // a source has no input, an output no output
+        assert_eq!(port_hit(&blocks, (0.0, y), 12.0), None);
+        assert_eq!(port_hit(&blocks, (408.0 + BW, y), 12.0), None);
+        // the closest of two ports wins
+        let close: Vec<Spot> = vec![(1, 0.0, 0.0, "volume"), (2, BW + 10.0, 0.0, "volume")];
+        assert_eq!(port_hit(&close, (BW + 2.0, y), 12.0), Some((1, Side::Out)));
+        assert_eq!(port_hit(&close, (BW + 8.0, y), 12.0), Some((2, Side::In)));
+        // a dragged wire ends on the port it is near, or on the card under the pointer
+        assert_eq!(target_at(&blocks, (204.0 - 15.0, y), 24.0, Side::In), Some(2));
+        assert_eq!(target_at(&blocks, (300.0, 20.0), 24.0, Side::In), Some(2));
+        assert_eq!(target_at(&blocks, (300.0, 400.0), 24.0, Side::In), None);
+        assert_eq!(wire_between(2, Side::In, 1), (1, 2));
+        assert_eq!(wire_between(1, Side::Out, 2), (1, 2));
+    }
+
+    #[test]
+    fn switching_automatic_wiring_back_on_only_fills_the_gaps() {
+        let mut s = Session::new("t");
+        let tone = s.add_block("test_tone", 2.0, 2.0);
+        let vol = s.add_block("volume", 8.0, 2.0);
+        let eq = s.add_block("graphic_eq", 14.0, 2.0);
+        let out = s.add_block("device_output", 20.0, 2.0);
+        let mic = s.add_block("device_input", 2.0, 8.0);
+        s.connect(tone, vol);
+        // eq and out have no input; the mic feeds nothing
+        let plan = rewire_plan(&s);
+        assert!(plan.contains(&(vol, eq)));
+        assert!(plan.contains(&(eq, out)));
+        assert!(plan.iter().any(|w| w.0 == mic));
+        // the existing wire stays as it was and nothing breaks the rules
+        assert!(!plan.iter().any(|w| w.0 == tone));
+        let mut after = s.clone();
+        for (a, b) in &plan {
+            assert_eq!(can_connect(&after, *a, *b), Ok(()));
+            after.connect(*a, *b);
+        }
+        // all wired: nothing more to offer
+        assert!(rewire_plan(&after).is_empty());
+    }
+
+    #[test]
+    fn wires_show_the_sound_that_passes() {
+        // stopped or fed by a source that is off: grey and still
+        assert_eq!(wire_look(false, false, 0.8, false), ("divider", 1.0, None));
+        assert_eq!(wire_look(true, true, 0.8, false), ("divider", 1.0, None));
+        // silence: faint and still
+        assert_eq!(wire_look(true, false, 0.0, false), ("accent", 0.3, None));
+        // louder = brighter and faster
+        let (_, a1, s1) = wire_look(true, false, 0.3, false);
+        let (_, a2, s2) = wire_look(true, false, 0.9, false);
+        assert!(a2 > a1 && s2.unwrap() > s1.unwrap());
+        // reduced motion: the opacity still follows, no pulses run
+        let (_, a3, s3) = wire_look(true, false, 0.9, true);
+        assert_eq!((a3, s3), (a2, None));
+    }
+
+    #[test]
+    fn a_growing_wire_follows_the_curve() {
+        let c = wire_curve((0.0, 0.0), (300.0, 120.0));
+        let h = bezier_head(&c, 0.5);
+        let m = bezier_at(&c, 0.5);
+        assert!((h[3].0 - m.0).abs() < 1e-9 && (h[3].1 - m.1).abs() < 1e-9);
+        assert_eq!(bezier_head(&c, 1.0), c);
+        assert_eq!(bezier_head(&c, 0.0)[3], c[0]);
+    }
+
     #[test]
     fn fitting_never_goes_under_75_or_over_100_percent() {
         assert_eq!(fit_zoom((400.0, 200.0), (1200.0, 800.0), 24.0), 1.0);
@@ -1442,11 +2222,4 @@ mod tests {
         let z = fit_zoom((1300.0, 300.0), (1200.0, 800.0), 24.0);
         assert!(z > MIN_FIT && z < 1.0);
     }
-}
-
-/// A block kind's tile that keeps its size (the glyph inside asks to expand).
-fn ktile(kind: &str, size: i32) -> gtk::Box {
-    let t = kind_tile(kind, size);
-    t.set_hexpand(false);
-    t
 }

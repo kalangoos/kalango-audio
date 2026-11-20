@@ -530,7 +530,7 @@ fn refresh_timers(ui: &Rc<Ui>, page: &Rc<Page>) {
         page.timers.append(&e);
     }
     for (key, t) in timers {
-        let r = hbox(14, "ka-cartao ka-horario");
+        let r = hbox(12, "ka-cartao ka-horario");
         if !t.on {
             r.add_css_class("desligado");
         }
@@ -794,7 +794,7 @@ fn refresh_autos(ui: &Rc<Ui>, page: &Rc<Page>) {
             card.add_css_class("desligada");
         }
         let grid = gtk::Grid::new();
-        grid.set_row_spacing(6);
+        grid.set_row_spacing(4);
         grid.set_column_spacing(12);
         let ev_i = EVENTS.iter().position(|e| e.0 == a.event).unwrap_or(0);
         let ev = chip_drop(&events, ev_i, "accent");
@@ -1118,11 +1118,11 @@ pub fn page(ui: &Rc<Ui>) -> gtk::Widget {
     body.add_overlay(&fixed);
     week_card.append(&body);
     left.append(&week_card);
-    let today_list = vbox(6, "ka-hoje");
+    let today_list = vbox(8, "ka-hoje");
     today_list.set_margin_top(16);
     left.append(&today_list);
     let tcap = caps(tr("Schedules"));
-    tcap.set_margin_top(20);
+    tcap.set_margin_top(24);
     tcap.set_margin_bottom(8);
     left.append(&tcap);
     let timers = vbox(8, "");
@@ -1140,7 +1140,7 @@ pub fn page(ui: &Rc<Ui>) -> gtk::Widget {
     autos.set_margin_top(16);
     right.append(&autos);
     let arow = hbox(8, "");
-    arow.set_margin_top(10);
+    arow.set_margin_top(8);
     let new_auto = button(tr("New automation"), "secundario", Some("mais"));
     let write = gtk::MenuButton::new();
     write.add_css_class("ka-botao");
@@ -1165,7 +1165,7 @@ pub fn page(ui: &Rc<Ui>) -> gtk::Widget {
 
     // the script editor
     let shead = hbox(8, "");
-    shead.set_margin_top(22);
+    shead.set_margin_top(24);
     shead.set_margin_bottom(8);
     let script_title = label("", "ka-caps");
     script_title.set_hexpand(true);
@@ -1207,7 +1207,7 @@ pub fn page(ui: &Rc<Ui>) -> gtk::Widget {
     csc.set_propagate_natural_height(true);
     editor.append(&csc);
     let erow = hbox(10, "");
-    erow.set_margin_top(10);
+    erow.set_margin_top(12);
     let run = button(tr("Run now"), "secundario", Some("tocar"));
     erow.append(&run);
     let api = para(tr("API: kalango.* and ctx.* · runs isolated, without network"), "ka-fraco2");
@@ -1220,7 +1220,7 @@ pub fn page(ui: &Rc<Ui>) -> gtk::Widget {
     right.append(&editor);
     let lcap = caps(tr("Log"));
     lcap.set_margin_top(16);
-    lcap.set_margin_bottom(6);
+    lcap.set_margin_bottom(8);
     right.append(&lcap);
     let log = label("", "ka-mono ka-fraco ka-script-registro");
     log.set_wrap(true);

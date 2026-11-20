@@ -150,7 +150,7 @@ fn card(ui: &Rc<Ui>, idx: usize, page: &Rc<Page>) -> gtk::Widget {
 
     // state, live meter, run/stop
     let state = hbox(8, "");
-    state.set_margin_top(14);
+    state.set_margin_top(4);
     let (token, text) = if recording {
         ("red", trf("Recording · {time}", &[("time", fmt_time(c.running_for(uid).unwrap_or(0.0)))]))
     } else if running {
@@ -193,12 +193,12 @@ fn card(ui: &Rc<Ui>, idx: usize, page: &Rc<Page>) -> gtk::Widget {
     body.append(&state);
 
     let div = hbox(0, "ka-linha-div");
-    div.set_margin_top(12);
+    div.set_margin_top(8);
     body.append(&div);
 
     // the last recording (or the routing note when it only plays)
     let foot = hbox(12, "");
-    foot.set_margin_top(10);
+    foot.set_margin_top(12);
     let txt = vbox(2, "");
     txt.set_hexpand(true);
     let last = c.recs.iter().find(|r| c.session_of_recording(r).map(|x| x.uid) == Some(uid)).cloned();
@@ -314,13 +314,18 @@ fn template_tile(ui: &Rc<Ui>, i: usize) -> gtk::Widget {
     let b = gtk::Button::new();
     b.add_css_class("ka-cartao2");
     b.add_css_class("ka-modelo-mini");
-    let row = hbox(10, "");
+    let row = hbox(16, "");
     let kinds: Vec<String> = {
         let s = t.instantiate();
         ordered_kinds(&s, 3)
     };
-    row.append(&chain(&kinds, 28, 10));
-    row.append(&line(tr(&t.name), "ka-texto"));
+    // the chain keeps its width (its tiles' icons expand) and the name is shown whole, as in the design
+    let ch = chain(&kinds, 28, 10);
+    ch.set_hexpand(false);
+    row.append(&ch);
+    let name = label(tr(&t.name), "ka-texto");
+    name.set_hexpand(true);
+    row.append(&name);
     b.set_child(Some(&row));
     let u = ui.clone();
     b.connect_clicked(move |_| {
@@ -430,7 +435,10 @@ pub fn page(ui: &Rc<Ui>) -> gtk::Widget {
     // the agent's suggestion
     let sug = hbox(12, "ka-sugestao");
     sug.set_margin_top(16);
-    sug.append(&tile("spark", "accent", 32));
+    let spark = tile("spark", "accent", 32);
+    // the tile's icon expands inside it; without this the tile shares the strip's free width with the texts
+    spark.set_hexpand(false);
+    sug.append(&spark);
     let st = vbox(2, "");
     st.set_hexpand(true);
     let sug_title = line("", "ka-titulo3");
@@ -445,7 +453,7 @@ pub fn page(ui: &Rc<Ui>) -> gtk::Widget {
     root.append(&sug);
 
     let cap = caps(tr("Your sessions"));
-    cap.set_margin_top(20);
+    cap.set_margin_top(24);
     cap.set_margin_bottom(8);
     root.append(&cap);
     let grid = gtk::FlowBox::new();

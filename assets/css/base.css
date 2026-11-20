@@ -1,5 +1,8 @@
 /* Kalango Audio · base. Only Design System tokens (@k_*); no shadows; corners 8 (windows, panels), 6 (cards), 4
-   (controls); circles only for switches, dots and avatars. Follows the KalangoOS shell's sheet. */
+   (controls); circles only for switches, dots and avatars. Follows the KalangoOS shell's sheet.
+   Spacing scale (Design System variables espaco/*): 4, 8, 12, 16, 24, 32 px. GTK CSS has no variables for
+   lengths, so paddings, margins and box spacings (CSS and Rust) should take one of these values; 2 px only for
+   hairline nudges inside a control (chips, keycaps). */
 
 window.ka-janela { background: @k_bg; color: @k_text; font-family: "Inter", "Roboto", "Cantarell", sans-serif; font-size: 13px; border: 1px solid @k_border; border-radius: 6px; }
 window.ka-janela.maximized, window.ka-janela.fullscreen { border-radius: 0; border: none; }
@@ -36,6 +39,8 @@ entry.ka-pedir:focus-within { border-color: @k_accent; }
 button.ka-controle-janela { min-width: 16px; min-height: 16px; padding: 0; border-radius: 4px; background: @k_surface2; }
 button.ka-controle-janela:hover { background: @k_raised; }
 .ka-paginas { background: @k_bg; }
+/* GTK's default theme pads every flow-box child by 3 px: the grids set their own gaps (16) */
+flowbox > flowboxchild { padding: 0; }
 .ka-pagina { padding: 20px 24px; }
 
 /* buttons */
@@ -105,6 +110,8 @@ dropdown.ka-seletor > button label { color: @k_text; }
 dropdown.ka-seletor > button:hover { border-color: @k_divider; }
 textview.ka-codigo, textview.ka-codigo text { background: @k_sunken; color: @k_text; font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; font-size: 12px; }
 scale { padding: 0; }
+/* the label sits 8 px over the track (6 of box spacing + 2) and the next control starts 4 + 16 px below it */
+.ka-controle > scale { margin-top: 2px; margin-bottom: 4px; }
 scale trough { background-image: none; background-color: @k_control; border: none; border-radius: 3px; min-height: 4px; }
 scale highlight { background-image: none; background-color: @k_accent; border: none; border-radius: 3px; margin: 0; min-height: 4px; }
 scale slider { background: @k_knob; border-radius: 99px; min-width: 14px; min-height: 14px; margin: -5px 0; border: 1px solid @k_knob_borda; box-shadow: none; }
@@ -149,7 +156,7 @@ button.ka-item-menu { min-height: 30px; padding: 0 10px; border-radius: 6px; }
 button.ka-item-menu label { color: @k_text; font-size: 13px; }
 button.ka-item-menu:hover { background: @k_raised; }
 button.ka-nova-sessao { min-height: 214px; }
-button.ka-modelo-mini { padding: 18px 14px; }
+button.ka-modelo-mini { padding: 16px; }
 button.ka-modelo-mini:hover { border-color: @k_divider; }
 
 /* drop-down lists (the system's: kalango-instalador) */

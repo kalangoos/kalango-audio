@@ -22,10 +22,10 @@ checkbutton.ka-item-menu label { color: @k_text; font-size: 13px; margin-left: 6
 
 /* library */
 .ka-biblioteca-lista { padding: 0 4px 12px 4px; }
-.ka-biblioteca-grupo { margin-top: 8px; }
+.ka-biblioteca-grupo { margin-top: 4px; }
 button.ka-grupo-botao { min-height: 26px; padding: 0 10px 0 8px; border-radius: 4px; }
 button.ka-grupo-botao:hover { background: alpha(@k_realce, 0.04); }
-.ka-biblioteca-item { min-height: 40px; padding: 0 8px; border-radius: 4px; border: 1px solid transparent; transition: background-color 120ms ease; }
+.ka-biblioteca-item { min-height: 38px; padding: 0 8px; border-radius: 4px; border: 1px solid transparent; transition: background-color 120ms ease; }
 .ka-biblioteca-item:hover { background: alpha(@k_realce, 0.05); }
 .ka-biblioteca-item:focus-visible { border-color: @k_accent; }
 .ka-biblioteca-item.arrastando { border: 1px dashed @k_divider; background: alpha(@k_realce, 0.04); }
@@ -71,11 +71,11 @@ button.ka-mais-bloco:hover { background: shade(@k_accent, 1.06); }
 
 /* inspector */
 .ka-inspetor { background: @k_surface; }
-.ka-inspetor-pagina { padding: 18px 20px 24px 20px; }
+.ka-inspetor-pagina { padding: 16px 20px 24px 20px; }
 .ka-ajustes .ka-controle { }
 .ka-curva { background: transparent; }
-.ka-atalho-linha { min-height: 30px; }
-.ka-tecla { font-size: 11px; padding: 3px 6px; background: @k_control; color: @k_text2; }
+.ka-atalho-linha { min-height: 24px; }
+.ka-tecla { font-size: 11px; padding: 4px 8px; background: @k_control; color: @k_text2; }
 .ka-eq scale.vertical { min-height: 120px; }
 button.ka-ficha { background: @k_control; border-radius: 4px; padding: 2px 8px; font-size: 11px; min-height: 22px; }
 button.ka-ficha label { color: @k_text2; font-size: 11px; }
