@@ -36,10 +36,45 @@ impl VoiceError {
     }
 }
 
-/// Where the agent program is: `$KALANGO_AGENTE`, the system's /usr/libexec/kalango-agente, or `kalango-agente` on
-/// the PATH (the development session puts its build there).
+/// Where the agent program is: `$KALANGO_AGENTE`, the system's /usr/libexec/kalango-agente, `kalango-agente` on the
+/// PATH, or the one beside the running KalangoOS shell (the same one the shell itself calls: in a development session
+/// both live in the build folder, which apps started from the dock do not have on their PATH).
 pub fn agent_binary() -> Option<PathBuf> {
-    agent_binary_in(std::env::var_os("KALANGO_AGENTE").map(PathBuf::from), std::env::var_os("PATH"))
+    agent_binary_in(std::env::var_os("KALANGO_AGENTE").map(PathBuf::from), std::env::var_os("PATH")).or_else(beside_shell)
+}
+
+/// `kalango-agente` next to the executable of a running `kalango-shell` of this user — the shell of this very
+/// session (same WAYLAND_DISPLAY) first.
+fn beside_shell() -> Option<PathBuf> {
+    let me = unsafe { libc::getuid() };
+    let display = std::env::var("WAYLAND_DISPLAY").unwrap_or_default();
+    let mut any = None;
+    let rd = std::fs::read_dir("/proc").ok()?;
+    for e in rd.flatten() {
+        let name = e.file_name();
+        if !name.to_string_lossy().bytes().all(|b| b.is_ascii_digit()) {
+            continue;
+        }
+        let owner = std::os::unix::fs::MetadataExt::uid(&match e.metadata() {
+            Ok(m) => m,
+            Err(_) => continue,
+        });
+        if owner != me {
+            continue;
+        }
+        let Ok(exe) = std::fs::read_link(e.path().join("exe")) else { continue };
+        if exe.file_name().is_some_and(|n| n == "kalango-shell") {
+            if let Some(a) = exe.parent().map(|d| d.join("kalango-agente")).filter(|p| p.is_file()) {
+                let env = std::fs::read(e.path().join("environ")).unwrap_or_default();
+                let same = !display.is_empty() && env.split(|b| *b == 0).any(|kv| kv == format!("WAYLAND_DISPLAY={display}").as_bytes());
+                if same {
+                    return Some(a);
+                }
+                any.get_or_insert(a);
+            }
+        }
+    }
+    any
 }
 
 fn agent_binary_in(env: Option<PathBuf>, path: Option<std::ffi::OsString>) -> Option<PathBuf> {
