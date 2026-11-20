@@ -40,3 +40,14 @@ button.ka-grav-item:hover { background: @k_raised; }
 /* filter chips are GtkToggleButtons, whose CSS node is "button.toggle" (base.css styles "togglebutton") */
 button.toggle.ka-filtro:checked { background: alpha(@k_accent, 0.18); }
 button.toggle.ka-filtro:checked label { color: @k_accent_text; }
+
+/* the summary and the job making it (design "Gravações · resumir" and "resumo pronto") */
+.ka-grav-resumir { background: alpha(@k_accent, 0.06); border: 1px solid alpha(@k_accent, 0.35); border-radius: 6px; padding: 16px; }
+.ka-grav-passo { background: @k_surface; border-radius: 6px; padding: 12px; }
+.ka-grav-passo-n { background: @k_control; color: @k_muted; border-radius: 4px; min-width: 22px; min-height: 22px; font-size: 12px; font-weight: 600; }
+.ka-grav-passo-n.ativo { background: alpha(@k_accent, 0.18); color: @k_accent_text; }
+progressbar.ka-grav-barra trough { background: @k_sunken; border-radius: 3px; min-height: 6px; min-width: 6px; border: none; padding: 0; }
+progressbar.ka-grav-barra progress { background: @k_accent; border-radius: 3px; min-height: 6px; min-width: 0; margin: 0; padding: 0; border: none; }
+.ka-grav-resumo { background: @k_surface2; border: 1px solid @k_border; border-radius: 6px; padding: 16px; }
+button.ka-grav-momento { padding: 6px 8px; border-radius: 4px; }
+button.ka-grav-momento:hover { background: alpha(@k_accent, 0.08); }

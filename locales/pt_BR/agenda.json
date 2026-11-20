@@ -77,6 +77,7 @@
  "the app": "o aplicativo",
  "the event’s session (or null)": "a sessão do evento (ou null)",
  "the recording that just finished (or null)": "a gravação que acabou de terminar (ou null)",
+ "transcribes it if needed, then writes a .resumo.md summary next to it (local model)": "transcreve se preciso e grava um resumo .resumo.md ao lado (modelo local)",
  "what fired the script": "o que disparou o script",
  "write an automation: {request}": "escreva uma automação: {request}",
  "writes a .txt next to it (KalangoOS voice model)": "grava um .txt ao lado (modelo de voz do KalangoOS)",
