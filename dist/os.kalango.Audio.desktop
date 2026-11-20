@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Kalango Audio
+GenericName=Gravador e roteador de som
+Comment=Capture, trate, roteie e grave o som de apps e microfones
+Exec=kalango-audio
+Icon=os.kalango.Audio
+Terminal=false
+Categories=AudioVideo;Audio;Recorder;
+Keywords=gravar;áudio;som;microfone;transcrever;podcast;
+StartupWMClass=os.kalango.Audio

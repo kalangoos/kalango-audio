@@ -1,0 +1,538 @@
+[
+ {
+  "name": "Em branco",
+  "subtitle": "Comece do zero",
+  "category": "Básico",
+  "icon": "blank",
+  "desc": "Uma sessão vazia. Arraste blocos da biblioteca; eles se ligam sozinhos na ordem em que entram.",
+  "blocks": []
+ },
+ {
+  "name": "Ligações livres",
+  "subtitle": "Você liga cada fio à mão",
+  "category": "Básico",
+  "icon": "wires",
+  "manual": true,
+  "desc": "Sessão vazia no modo de ligação manual: nada é conectado automaticamente, bom para montar caminhos com vários ramos.",
+  "blocks": []
+ },
+ {
+  "name": "Gravar aplicativo",
+  "subtitle": "O som de um programa, direto para arquivo",
+  "category": "Gravar",
+  "icon": "app",
+  "desc": "Capta só o aplicativo escolhido (navegador, player, jogo…), grava em WAV e continua tocando nos seus alto-falantes.",
+  "blocks": [
+   {
+    "kind": "app_source",
+    "p": {
+     "app": "Any Application"
+    },
+    "out": [
+     1,
+     2
+    ]
+   },
+   {
+    "kind": "recorder",
+    "p": {
+     "file_name": "%date %time %name",
+     "format": "WAV"
+    },
+    "out": []
+   },
+   {
+    "kind": "device_output",
+    "p": {},
+    "out": []
+   }
+  ]
+ },
+ {
+  "name": "Reunião online",
+  "subtitle": "Navegador + microfone, com transcrição",
+  "category": "Gravar",
+  "icon": "meeting",
+  "desc": "Junta a chamada aberta no navegador com a sua voz, grava tudo num arquivo só e gera a transcrição em texto ao mesmo tempo. Escolha o modelo do whisper no bloco Transcrever.",
+  "blocks": [
+   {
+    "kind": "app_source",
+    "p": {
+     "app": "Web Browser"
+    },
+    "out": [
+     2,
+     5
+    ]
+   },
+   {
+    "kind": "device_input",
+    "p": {},
+    "out": [
+     2
+    ]
+   },
+   {
+    "kind": "mixer",
+    "p": {},
+    "out": [
+     3,
+     4
+    ]
+   },
+   {
+    "kind": "recorder",
+    "p": {
+     "file_name": "%date %time Reunião",
+     "format": "WAV"
+    },
+    "out": []
+   },
+   {
+    "kind": "transcribe",
+    "p": {
+     "language": "pt",
+     "file_name": "%date %time Transcrição"
+    },
+    "out": []
+   },
+   {
+    "kind": "device_output",
+    "p": {},
+    "out": []
+   }
+  ]
+ },
+ {
+  "name": "Podcast remoto",
+  "subtitle": "Sua voz tratada + convidado por chamada",
+  "category": "Voz",
+  "icon": "podcast",
+  "desc": "Seu microfone passa por limpeza de voz e compressor; o convidado chega pelo aplicativo de chamada e você o ouve nos fones. Os dois se juntam no mixer, ganham corpo e vão para o gravador.",
+  "blocks": [
+   {
+    "kind": "device_input",
+    "p": {},
+    "out": [
+     1
+    ]
+   },
+   {
+    "kind": "voice_denoise",
+    "p": {},
+    "out": [
+     2
+    ]
+   },
+   {
+    "kind": "compressor",
+    "p": {
+     "amount": 0.6,
+     "speed": 0.0,
+     "makeup": 1.0
+    },
+    "out": [
+     4
+    ]
+   },
+   {
+    "kind": "app_source",
+    "p": {
+     "app": "Call App"
+    },
+    "out": [
+     4,
+     7
+    ]
+   },
+   {
+    "kind": "mixer",
+    "p": {},
+    "out": [
+     5
+    ]
+   },
+   {
+    "kind": "loudness",
+    "p": {
+     "amount": 0.4,
+     "speed": 0.0,
+     "makeup": 1.0
+    },
+    "out": [
+     6
+    ]
+   },
+   {
+    "kind": "recorder",
+    "p": {
+     "file_name": "%date %time Podcast",
+     "format": "WAV"
+    },
+    "out": []
+   },
+   {
+    "kind": "device_output",
+    "p": {},
+    "out": []
+   }
+  ]
+ },
+ {
+  "name": "Narração limpa",
+  "subtitle": "Microfone limpo, firme e claro",
+  "category": "Voz",
+  "icon": "mic",
+  "desc": "Para locução e tutoriais: limpeza de voz tira o ruído de fundo, o compressor iguala o volume e o equalizador “Voz clara” dá presença. Um medidor mostra o nível enquanto grava.",
+  "blocks": [
+   {
+    "kind": "device_input",
+    "p": {},
+    "out": [
+     1
+    ]
+   },
+   {
+    "kind": "voice_denoise",
+    "p": {},
+    "out": [
+     2
+    ]
+   },
+   {
+    "kind": "compressor",
+    "p": {
+     "amount": 0.7,
+     "speed": 0.0,
+     "makeup": 1.0
+    },
+    "out": [
+     3
+    ]
+   },
+   {
+    "kind": "graphic_eq",
+    "p": {
+     "band0": 0.25,
+     "band1": 0.3333,
+     "band2": 0.4167,
+     "band3": 0.5,
+     "band4": 0.5417,
+     "band5": 0.5833,
+     "band6": 0.625,
+     "band7": 0.625,
+     "band8": 0.5833,
+     "band9": 0.5
+    },
+    "out": [
+     4,
+     5
+    ]
+   },
+   {
+    "kind": "level_meter",
+    "p": {},
+    "out": []
+   },
+   {
+    "kind": "recorder",
+    "p": {
+     "file_name": "%date %time Narração",
+     "format": "WAV"
+    },
+    "out": []
+   }
+  ]
+ },
+ {
+  "name": "Ouvir mais alto",
+  "subtitle": "Mais volume sem distorcer",
+  "category": "Ouvir",
+  "icon": "volume",
+  "desc": "Dá um reforço no som de um aplicativo baixo demais. O compressor no final segura os picos como um limitador. Troque o aplicativo no primeiro bloco.",
+  "blocks": [
+   {
+    "kind": "app_source",
+    "p": {
+     "app": "Web Browser"
+    },
+    "out": [
+     1
+    ]
+   },
+   {
+    "kind": "volume",
+    "p": {
+     "gain": 1.0,
+     "boost": 2.5
+    },
+    "out": [
+     2
+    ]
+   },
+   {
+    "kind": "compressor",
+    "p": {
+     "amount": 1.0,
+     "speed": 0.0,
+     "makeup": 0.0
+    },
+    "out": [
+     3
+    ]
+   },
+   {
+    "kind": "device_output",
+    "p": {},
+    "out": []
+   }
+  ]
+ },
+ {
+  "name": "Gravar o computador",
+  "subtitle": "Tudo o que toca, num arquivo",
+  "category": "Gravar",
+  "icon": "computer",
+  "desc": "Capta o som do sistema inteiro — notificações incluídas — e grava em WAV. Útil quando o áudio vem de vários programas ao mesmo tempo.",
+  "blocks": [
+   {
+    "kind": "system_sound",
+    "p": {},
+    "out": [
+     1
+    ]
+   },
+   {
+    "kind": "level_meter",
+    "p": {},
+    "out": [
+     2
+    ]
+   },
+   {
+    "kind": "recorder",
+    "p": {
+     "file_name": "%date %time Computador",
+     "format": "WAV"
+    },
+    "out": []
+   }
+  ]
+ },
+ {
+  "name": "Rádio online",
+  "subtitle": "Transmita para um servidor Icecast",
+  "category": "Transmitir",
+  "icon": "radio",
+  "desc": "Sua voz e a música de um aplicativo se juntam no mixer, passam pelo Encorpar e seguem para o servidor de rádio. Uma cópia fica gravada no computador.",
+  "blocks": [
+   {
+    "kind": "device_input",
+    "p": {},
+    "out": [
+     1
+    ]
+   },
+   {
+    "kind": "compressor",
+    "p": {
+     "amount": 0.6,
+     "speed": 0.0,
+     "makeup": 1.0
+    },
+    "out": [
+     3
+    ]
+   },
+   {
+    "kind": "app_source",
+    "p": {
+     "app": "Any Application"
+    },
+    "out": [
+     3
+    ]
+   },
+   {
+    "kind": "mixer",
+    "p": {},
+    "out": [
+     4
+    ]
+   },
+   {
+    "kind": "loudness",
+    "p": {
+     "amount": 0.5,
+     "speed": 0.0,
+     "makeup": 1.0
+    },
+    "out": [
+     5,
+     6
+    ]
+   },
+   {
+    "kind": "radio_stream",
+    "p": {
+     "format": "MP3",
+     "bitrate": 128.0
+    },
+    "out": []
+   },
+   {
+    "kind": "recorder",
+    "p": {
+     "file_name": "%date %time Rádio",
+     "format": "WAV"
+    },
+    "out": []
+   }
+  ]
+ },
+ {
+  "name": "Live RTMP",
+  "subtitle": "Áudio para YouTube, Twitch e afins",
+  "category": "Transmitir",
+  "icon": "live",
+  "desc": "Microfone limpo mais o som do computador, nivelados por um compressor e enviados a um servidor RTMP. Preencha o endereço e a chave da transmissão no último bloco.",
+  "blocks": [
+   {
+    "kind": "device_input",
+    "p": {},
+    "out": [
+     1
+    ]
+   },
+   {
+    "kind": "voice_denoise",
+    "p": {},
+    "out": [
+     3
+    ]
+   },
+   {
+    "kind": "system_sound",
+    "p": {},
+    "out": [
+     3
+    ]
+   },
+   {
+    "kind": "mixer",
+    "p": {},
+    "out": [
+     4
+    ]
+   },
+   {
+    "kind": "compressor",
+    "p": {
+     "amount": 0.5,
+     "speed": 0.0,
+     "makeup": 1.0
+    },
+    "out": [
+     5
+    ]
+   },
+   {
+    "kind": "rtmp_stream",
+    "p": {},
+    "out": []
+   }
+  ]
+ },
+ {
+  "name": "Monitorar microfone",
+  "subtitle": "Ouça sua voz nos fones",
+  "category": "Ouvir",
+  "icon": "headphones",
+  "desc": "Manda o microfone direto para a saída escolhida, com medidor de nível. Use fones para evitar microfonia.",
+  "blocks": [
+   {
+    "kind": "device_input",
+    "p": {},
+    "out": [
+     1
+    ]
+   },
+   {
+    "kind": "level_meter",
+    "p": {},
+    "out": [
+     2
+    ]
+   },
+   {
+    "kind": "device_output",
+    "p": {
+     "gain": 0.8
+    },
+    "out": []
+   }
+  ]
+ },
+ {
+  "name": "Aula ou palestra",
+  "subtitle": "Grave e transcreva uma fala longa",
+  "category": "Voz",
+  "icon": "lecture",
+  "desc": "Para salas com ruído constante: a redução de ruído aprende o fundo, o passa-altas tira o ronco grave e o compressor iguala perguntas e respostas. Grava e transcreve ao mesmo tempo.",
+  "blocks": [
+   {
+    "kind": "device_input",
+    "p": {},
+    "out": [
+     1
+    ]
+   },
+   {
+    "kind": "noise_reduction",
+    "p": {
+     "reduction": 9.0
+    },
+    "out": [
+     2
+    ]
+   },
+   {
+    "kind": "high_pass",
+    "p": {
+     "freq": 100.0
+    },
+    "out": [
+     3
+    ]
+   },
+   {
+    "kind": "compressor",
+    "p": {
+     "amount": 0.6,
+     "speed": 0.0,
+     "makeup": 1.0
+    },
+    "out": [
+     4,
+     5
+    ]
+   },
+   {
+    "kind": "recorder",
+    "p": {
+     "file_name": "%date %time Aula",
+     "format": "WAV"
+    },
+    "out": []
+   },
+   {
+    "kind": "transcribe",
+    "p": {
+     "language": "pt",
+     "file_name": "%date %time Transcrição"
+    },
+    "out": []
+   }
+  ]
+ }
+]

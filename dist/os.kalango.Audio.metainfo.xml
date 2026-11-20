@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>os.kalango.Audio</id>
+  <name>Kalango Audio</name>
+  <summary>Capture, trate, roteie e grave o som de apps e microfones</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <launchable type="desktop-id">os.kalango.Audio.desktop</launchable>
+  <url type="vcs-browser">https://github.com/kalangoos/kalango-audio</url>
+  <description>
+    <p>Monte sessões com blocos (fontes, efeitos e saídas), ouça o resultado ao vivo, grave em arquivo,
+    transmita e transcreva — tudo no seu computador. Parte do KalangoOS.</p>
+  </description>
+</component>

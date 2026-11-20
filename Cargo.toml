@@ -1,0 +1,25 @@
+[package]
+name = "kalango-audio"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+description = "Kalango Audio: captura, roteia e grava o som do KalangoOS"
+repository = "https://github.com/kalangoos/kalango-audio"
+publish = false
+
+[dependencies]
+boa_engine = "0.22.0"
+eframe = "0.37.0"
+hound = "3.5.1"
+image = { version = "0.25.10", default-features = false, features = ["png"] }
+libc = "0.2.191"
+libloading = "0.9.1"
+nnnoiseless = "0.5.2"
+rustfft = "6.4.1"
+serde = "1.0.229"
+serde_json = "1.0.154"
+
+# Sound is processed in real time, so even the everyday (debug) build is optimised.
+[profile.dev]
+opt-level = 2
+debug = 1
