@@ -151,3 +151,19 @@ button.ka-item-menu:hover { background: @k_raised; }
 button.ka-nova-sessao { min-height: 214px; }
 button.ka-modelo-mini { padding: 18px 14px; }
 button.ka-modelo-mini:hover { border-color: @k_divider; }
+
+/* drop-down lists (the system's: kalango-instalador) */
+dropdown.ka-seletor arrow { color: @k_muted; -gtk-icon-size: 16px; }
+dropdown.ka-seletor popover contents { background: @k_surface; border: 1px solid @k_border; border-radius: 6px; padding: 4px; box-shadow: none; color: @k_text; }
+dropdown.ka-seletor popover listview { background: transparent; }
+dropdown.ka-seletor popover listview > row { min-height: 30px; padding: 0 10px; border-radius: 4px; color: @k_text; font-size: 12px; }
+dropdown.ka-seletor popover listview > row label { color: @k_text; }
+dropdown.ka-seletor popover listview > row:hover, dropdown.ka-seletor popover listview > row:selected { background: @k_raised; }
+dropdown.ka-seletor popover listview > row image { color: @k_accent; }
+dropdown.ka-seletor popover entry, dropdown.ka-seletor popover searchentry { background: @k_field; border: 1px solid @k_border; border-radius: 4px; box-shadow: none; outline: none; min-height: 30px; margin: 2px 2px 6px; padding: 0 8px; color: @k_text; caret-color: @k_text; }
+dropdown.ka-seletor popover entry:focus-within, dropdown.ka-seletor popover searchentry:focus-within { border-color: @k_accent; outline: none; box-shadow: none; }
+dropdown.ka-seletor popover entry > text, dropdown.ka-seletor popover searchentry > text { background: transparent; color: @k_text; }
+dropdown.ka-seletor popover entry > text > placeholder, dropdown.ka-seletor popover searchentry > text > placeholder { color: @k_dim; }
+dropdown.ka-seletor popover entry image, dropdown.ka-seletor popover searchentry image { color: @k_muted; }
+dropdown.ka-seletor popover separator { background: @k_border; min-height: 1px; margin: 0 2px; }
+dropdown.ka-seletor popover scrollbar slider { background: @k_divider; border-radius: 4px; min-width: 4px; }

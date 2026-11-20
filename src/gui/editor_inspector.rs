@@ -33,6 +33,8 @@ pub struct Inspector {
     frame: Cell<u32>,
     /// "Save as…" is open
     saving: Cell<bool>,
+    /// a rebuild waits for an open drop-down list to close
+    waiting: Cell<bool>,
 }
 
 impl Inspector {
@@ -55,6 +57,7 @@ impl Inspector {
             n: Cell::new(0),
             frame: Cell::new(0),
             saving: Cell::new(false),
+            waiting: Cell::new(false),
         })
     }
 
@@ -80,6 +83,24 @@ impl Inspector {
             };
             self.rebuild(other_block);
         }
+    }
+
+    /// Whether a drop-down list (a popover) of the inspector is open now.
+    pub fn list_open(&self) -> bool {
+        fn walk(w: &gtk::Widget) -> bool {
+            if w.downcast_ref::<gtk::Popover>().is_some_and(|p| p.is_mapped()) {
+                return true;
+            }
+            let mut c = w.first_child();
+            while let Some(x) = c {
+                if walk(&x) {
+                    return true;
+                }
+                c = x.next_sibling();
+            }
+            false
+        }
+        walk(self.stack.upcast_ref())
     }
 
     /// Every frame: the meters and the curve; texts four times a second.
@@ -108,6 +129,22 @@ impl Inspector {
 
     /// Builds the content again; `animate` crossfades it in with the slide.
     pub fn rebuild(self: &Rc<Self>, animate: bool) {
+        // never under an open drop-down list: the list would be destroyed while the person uses it; try again
+        // once it closes
+        if self.list_open() {
+            if !self.waiting.replace(true) {
+                let me = self.clone();
+                glib::timeout_add_local(std::time::Duration::from_millis(250), move || {
+                    if me.list_open() {
+                        return glib::ControlFlow::Continue;
+                    }
+                    me.waiting.set(false);
+                    me.rebuild(animate);
+                    glib::ControlFlow::Break
+                });
+            }
+            return;
+        }
         let cur = self.current();
         self.live.borrow_mut().clear();
         let page = vbox(0, "ka-inspetor-pagina");
@@ -732,17 +769,28 @@ impl Cx {
                 return;
             }
             let Some(b) = c.session().and_then(|s| s.block(id)) else { return };
+            // (only what changed: a text set again resizes the panel, and an open list above it with it)
             match f(c, b) {
                 Some((t, err)) => {
-                    l2.set_text(&t);
-                    l2.set_visible(true);
-                    if err {
-                        l2.add_css_class("cor-red");
-                    } else {
-                        l2.remove_css_class("cor-red");
+                    if l2.text() != t {
+                        l2.set_text(&t);
+                    }
+                    if !l2.is_visible() {
+                        l2.set_visible(true);
+                    }
+                    if err != l2.has_css_class("cor-red") {
+                        if err {
+                            l2.add_css_class("cor-red");
+                        } else {
+                            l2.remove_css_class("cor-red");
+                        }
                     }
                 }
-                None => l2.set_visible(false),
+                None => {
+                    if l2.is_visible() {
+                        l2.set_visible(false)
+                    }
+                }
             }
         }));
         l
@@ -788,10 +836,15 @@ fn fit_dropdown(d: &gtk::DropDown) {
         f.connect_setup(move |_, item| {
             let l = gtk::Label::new(None);
             l.set_xalign(0.0);
+            l.set_ellipsize(gtk::pango::EllipsizeMode::End);
             if cut {
-                l.set_ellipsize(gtk::pango::EllipsizeMode::End);
                 l.set_max_width_chars(1);
                 l.set_hexpand(true);
+            } else {
+                // every row asks for the same width: the list (and its popover) never changes size while it
+                // scrolls through names of different lengths
+                l.set_width_chars(34);
+                l.set_max_width_chars(34);
             }
             if let Some(i) = item.downcast_ref::<gtk::ListItem>() {
                 i.set_child(Some(&l));

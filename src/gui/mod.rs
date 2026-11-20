@@ -583,6 +583,10 @@ fn capture_later(ui: &Rc<Ui>, path: String) {
 /// Runs the app (returns the exit code).
 pub fn run() -> glib::ExitCode {
     let app = gtk::Application::builder().application_id(APP_ID).flags(gio::ApplicationFlags::NON_UNIQUE).build();
+    // the installed programs (for the Application block's list) are read once, in the background
+    std::thread::spawn(|| {
+        let _ = crate::audio::installed_apps();
+    });
     app.connect_startup(|_| {
         if let Some(d) = gdk::Display::default() {
             theme::start(&d);
