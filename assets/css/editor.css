@@ -1,0 +1,94 @@
+/* Kalango Audio · editor (bar, library, canvas, blocks, inspector, sheet) */
+
+/* session bar: 56 px */
+.ka-barra-sessao { background: @k_bg; min-height: 56px; padding: 0 12px 0 10px; border-bottom: 1px solid @k_border; }
+.ka-sessao-rotulo { font-size: 11px; color: @k_muted; }
+entry.ka-nome-sessao { min-height: 26px; font-size: 14px; font-weight: 600; }
+.ka-cronometro { font-size: 20px; font-weight: 500; letter-spacing: 0.5px; color: @k_text; }
+.ka-cronometro.parado { color: @k_dim; }
+.ka-cronometro.gravando { color: @k_text; }
+.ka-estado-sessao { font-size: 12px; font-weight: 500; }
+.ka-estado-sessao.parado { color: @k_muted; font-weight: 400; }
+@keyframes ka-pulso { from { opacity: 1; } to { opacity: 0.4; } }
+.ka-pulsa.cor-red { animation: ka-pulso 1s ease-in-out infinite alternate; }
+.ka-item-menu-linha { padding: 2px 10px; }
+button.ka-item-menu, checkbutton.ka-item-menu { min-height: 30px; padding: 0 10px; border-radius: 6px; font-size: 13px; }
+button.ka-item-menu:hover, checkbutton.ka-item-menu:hover { background: @k_raised; }
+checkbutton.ka-item-menu label { color: @k_text; font-size: 13px; margin-left: 6px; }
+
+/* the three columns */
+.ka-editor-esquerda { background: @k_base; border-right: 1px solid @k_border; }
+.ka-editor-direita { background: @k_surface; border-left: 1px solid @k_border; }
+
+/* library */
+.ka-biblioteca-lista { padding: 0 4px 12px 4px; }
+.ka-biblioteca-grupo { margin-top: 8px; }
+button.ka-grupo-botao { min-height: 26px; padding: 0 10px 0 8px; border-radius: 4px; }
+button.ka-grupo-botao:hover { background: alpha(@k_realce, 0.04); }
+.ka-biblioteca-item { min-height: 40px; padding: 0 8px; border-radius: 4px; border: 1px solid transparent; transition: background-color 120ms ease; }
+.ka-biblioteca-item:hover { background: alpha(@k_realce, 0.05); }
+.ka-biblioteca-item:focus-visible { border-color: @k_accent; }
+.ka-biblioteca-item.arrastando { border: 1px dashed @k_divider; background: alpha(@k_realce, 0.04); }
+.ka-biblioteca-nome { font-size: 13px; color: @k_text; }
+.ka-biblioteca-desc { font-size: 11px; color: @k_muted; }
+popover.ka-biblioteca-pop > contents { padding: 0; }
+
+/* canvas */
+.ka-canvas { background: @k_bg; }
+.ka-zoom { background: @k_surface; border: 1px solid @k_border; border-radius: 6px; min-height: 30px; padding: 0 2px; }
+.ka-zoom button.ka-icone { min-width: 24px; min-height: 26px; }
+.ka-zoom-valor { font-size: 12px; color: @k_text; padding: 0 8px; }
+button.ka-zoom-ajustar { padding: 0 12px; font-size: 12px; min-height: 26px; border-radius: 4px; }
+button.ka-zoom-ajustar label { color: @k_text2; }
+button.ka-zoom-ajustar:hover { background: alpha(@k_realce, 0.06); }
+.ka-canvas-estado label { font-size: 11px; }
+button.ka-link-botao.ka-fiacao { font-size: 11px; padding: 0; min-height: 0; }
+button.ka-link-botao.ka-fiacao label { color: @k_accent_text; font-size: 11px; }
+.ka-dica-soltar { background: @k_raised; border-radius: 4px; padding: 5px 10px; font-size: 12px; color: @k_text; }
+.ka-dica-fio { background: alpha(@k_bg, 0.9); border-radius: 4px; padding: 2px 4px; }
+.ka-faixa-erro { background: alpha(@k_red, 0.08); border: 1px solid alpha(@k_red, 0.7); border-radius: 6px; padding: 10px 14px 10px 16px; }
+.ka-faixa-titulo { font-size: 13px; font-weight: 500; color: @k_red; }
+.ka-faixa-erro button.ka-botao { background: @k_surface2; }
+
+/* blocks */
+.ka-bloco { background: @k_surface; border: 1px solid @k_border; border-radius: 6px; padding: 9px 9px 9px 11px; }
+.ka-bloco.selecionado { border: 2px solid @k_accent; padding: 8px 8px 8px 10px; }
+.ka-bloco.erro { border: 1px solid @k_red; }
+.ka-bloco.erro.selecionado { border-width: 2px; }
+.ka-bloco.desligado > box { opacity: 0.5; }
+.ka-bloco.ka-fantasma { border: 1px dashed @k_accent; background: alpha(@k_surface, 0.95); }
+.ka-bloco-titulo { font-size: 13px; font-weight: 600; color: @k_text; }
+.ka-bloco-resumo { font-size: 11px; color: @k_muted; }
+.ka-bloco-linha { margin-top: 1px; margin-left: 32px; }
+.ka-bloco-linha .ka-ponto { min-width: 6px; min-height: 6px; }
+.ka-bloco-erro { font-size: 11px; color: @k_red; margin-bottom: 4px; }
+button.ka-bloco-energia { min-width: 20px; min-height: 20px; border-radius: 4px; margin-top: -2px; }
+button.ka-bloco-energia:hover { background: alpha(@k_realce, 0.08); }
+
+/* narrow: the + button */
+button.ka-mais-bloco { background: @k_accent; min-width: 44px; min-height: 44px; border-radius: 6px; }
+button.ka-mais-bloco:hover { background: shade(@k_accent, 1.06); }
+
+/* inspector */
+.ka-inspetor { background: @k_surface; }
+.ka-inspetor-pagina { padding: 18px 20px 24px 20px; }
+.ka-ajustes .ka-controle { }
+.ka-curva { background: transparent; }
+.ka-atalho-linha { min-height: 30px; }
+.ka-tecla { font-size: 11px; padding: 3px 6px; background: @k_control; color: @k_text2; }
+.ka-eq scale.vertical { min-height: 120px; }
+button.ka-ficha { background: @k_control; border-radius: 4px; padding: 2px 8px; font-size: 11px; min-height: 22px; }
+button.ka-ficha label { color: @k_text2; font-size: 11px; }
+button.ka-ficha:hover { background: @k_raised; }
+.ka-faixa-mixer { padding: 12px; }
+expander.ka-expansor title label { font-size: 12px; font-weight: 500; color: @k_text2; }
+expander.ka-expansor arrow { color: @k_muted; min-width: 12px; }
+spinbutton.ka-numero { background: @k_field; border: 1px solid @k_border; border-radius: 4px; min-height: 30px; font-size: 12px; color: @k_text; }
+spinbutton.ka-numero button { all: unset; min-width: 24px; color: @k_text2; }
+button.ka-escolher { min-width: 30px; min-height: 30px; background: @k_control; }
+
+/* bottom sheet */
+.ka-folha { background: @k_surface; border-top: 1px solid @k_border; border-radius: 8px 8px 0 0; }
+.ka-folha-alca { min-height: 18px; padding-top: 8px; }
+.ka-folha-pegador { background: @k_divider; min-width: 36px; min-height: 4px; border-radius: 4px; }
+.ka-folha .ka-inspetor-pagina { padding-top: 8px; }

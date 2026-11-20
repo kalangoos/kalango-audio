@@ -1,0 +1,48 @@
+/* Kalango Audio · agenda */
+
+/* the week */
+.ka-semana { padding: 10px 12px 8px 12px; }
+.ka-semana-cabeca { min-height: 26px; margin-bottom: 4px; }
+.ka-semana-dia { font-size: 11px; color: @k_muted; }
+.ka-semana-dia.hoje { color: @k_accent_text; font-weight: 600; }
+.ka-faixa { border-radius: 4px; border-left: 2px solid @k_accent; background: alpha(@k_accent, 0.22); padding: 4px 6px 0 6px; transition: opacity 120ms ease; }
+.ka-faixa.cor-teal { border-left-color: @k_teal; background: alpha(@k_teal, 0.20); }
+.ka-faixa.cor-gold { border-left-color: @k_gold; background: alpha(@k_gold, 0.20); }
+.ka-faixa.cor-blue { border-left-color: @k_blue; background: alpha(@k_blue, 0.20); }
+.ka-faixa.cor-coral { border-left-color: @k_coral; background: alpha(@k_coral, 0.20); }
+.ka-faixa.cor-purple { border-left-color: @k_purple; background: alpha(@k_purple, 0.20); }
+.ka-faixa.desligada { opacity: 0.45; }
+.ka-faixa.arrastando { opacity: 0.8; }
+.ka-faixa-nome { font-size: 11px; font-weight: 600; color: @k_text; }
+.ka-faixa-hora { font-size: 10px; color: @k_text2; font-feature-settings: "tnum"; }
+.ka-faixa-alca { min-height: 6px; }
+
+/* narrow: today's list */
+.ka-hoje-linha { background: @k_surface; border: 1px solid @k_border; border-left: 2px solid @k_accent; border-radius: 6px; padding: 10px 12px; }
+.ka-hoje-linha.cor-teal { border-left-color: @k_teal; }
+.ka-hoje-linha.cor-gold { border-left-color: @k_gold; }
+.ka-hoje-linha.cor-blue { border-left-color: @k_blue; }
+.ka-hoje-linha.cor-coral { border-left-color: @k_coral; }
+.ka-hoje-linha.cor-purple { border-left-color: @k_purple; }
+
+/* timers */
+.ka-horario { padding: 10px 16px; min-height: 36px; }
+.ka-horario.desligado .ka-titulo3 { color: @k_muted; }
+
+/* automations */
+.ka-automacao { padding: 10px 16px; }
+.ka-automacao.desligada { opacity: 0.7; }
+dropdown.ka-chip-seletor > button { min-height: 20px; padding: 1px 7px; border-radius: 4px; font-size: 11px; font-weight: 500; background: alpha(@k_realce, 0.08); }
+dropdown.ka-chip-seletor > button label { color: @k_text2; }
+dropdown.ka-chip-seletor > button arrow { min-width: 10px; min-height: 10px; color: @k_dim; }
+dropdown.ka-chip-seletor.cor-accent > button { background: alpha(@k_accent, 0.16); }
+dropdown.ka-chip-seletor.cor-accent > button label { color: @k_accent_text; }
+dropdown.ka-chip-seletor.cor-teal > button { background: alpha(@k_teal, 0.16); }
+dropdown.ka-chip-seletor.cor-teal > button label { color: @k_teal; }
+dropdown.ka-chip-seletor > button:hover { background: alpha(@k_realce, 0.12); }
+
+/* the script editor */
+.ka-script { padding: 12px 14px; border: 1px solid @k_border; }
+.ka-script-linhas { color: @k_dim; min-width: 18px; }
+.ka-script-registro { background: @k_sunken; border-radius: 6px; padding: 8px 10px; font-size: 11px; }
+.ka-ajuda-scripts > viewport > label { padding: 12px 14px; }

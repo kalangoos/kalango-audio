@@ -1,5 +1,6 @@
 //! Effect plug-ins (LADSPA): third-party effects installed on the system, shown as the "Plug-in LADSPA" block.
 //! Plug-ins are found in the usual folders, loaded at run time, and run on the sound like any other block.
+use crate::i18n::tr;
 use crate::dsp::Frame;
 use libloading::Library;
 use std::ffi::{c_char, c_ulong, c_void, CStr};
@@ -179,14 +180,14 @@ impl Instance {
             let lib: &'static Library = Box::leak(Box::new(Library::new(&info.path).map_err(|e| e.to_string())?));
             let entry = *lib.get::<EntryFn>(b"ladspa_descriptor\0").map_err(|e| e.to_string())?;
             let d = entry(info.index as c_ulong);
-            if d.is_null() { return Err("o plug-in não está mais lá".into()); }
+            if d.is_null() { return Err(tr("the plug-in is no longer there").into()); }
             let desc: &'static Descriptor = &*d;
-            let inst = desc.instantiate.ok_or("o plug-in não pode ser iniciado")?;
+            let inst = desc.instantiate.ok_or_else(|| tr("the plug-in cannot be started").to_string())?;
             let sides = if info.ins.len() == 1 { 2 } else { 1 };
             let mut handles = vec![];
             for _ in 0..sides {
                 let h = inst(d, rate as c_ulong);
-                if h.is_null() { return Err("o plug-in se recusou a iniciar".into()); }
+                if h.is_null() { return Err(tr("the plug-in refused to start").into()); }
                 handles.push(h);
             }
             let controls: Vec<f32> = info.controls.iter().map(|c| c.default).collect();

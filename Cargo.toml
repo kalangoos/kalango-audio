@@ -9,7 +9,9 @@ publish = false
 
 [dependencies]
 boa_engine = "0.22.0"
-eframe = "0.37.0"
+gtk = { package = "gtk4", version = "0.9", features = ["v4_14"] }
+# the Design System's springs (rápida, suave, elástica, lenta) and the widget that animates them, shared with KalangoOS
+kalango-movimento = { git = "https://github.com/kalangoos/kalangoos", rev = "cd9ad9d4368605f7f302c3927138454f93bb6637" }
 hound = "3.5.1"
 image = { version = "0.25.10", default-features = false, features = ["png"] }
 libc = "0.2.191"

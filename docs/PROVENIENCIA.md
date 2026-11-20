@@ -8,7 +8,7 @@ está listado como removido entrou em nenhum commit.
 
 ## O que foi importado
 
-- `src/` (Rust, eframe/egui), `Cargo.toml`, `Cargo.lock`, `install.sh` e `README.md` — todos reescritos ou
+- `src/` (Rust; a interface era em eframe/egui e foi trocada por GTK 4 depois, na interface nova), `Cargo.toml`, `Cargo.lock`, `install.sh` e `README.md` — todos reescritos ou
   revisados como descrito abaixo.
 - **Não importado:** a pasta de build (`target/`), as capturas de tela da reconstrução (`shots/`: mostravam
   textos e nomes de modelos copiados), a ficha de mecânica (`MECHANICS.md` e `mechanics.json`: descreviam o
@@ -67,12 +67,11 @@ grep -rniE "$PADRAO" .
 
 - O Kalango Audio é **GPL-3.0-or-later** (`LICENSE`).
 - Dependências (linux x86_64): MIT, Apache-2.0, BSD-2/3, ISC, Zlib, Unicode-3.0, Unlicense, 0BSD,
-  Apache-2.0 WITH LLVM-exception, e as fontes padrão do egui (OFL-1.1 e Ubuntu-font-1.0, aceitas pelo KalangoOS).
+  Apache-2.0 WITH LLVM-exception; `kalango-movimento` (as molas do KalangoOS) é GPL-3.0-or-later, como nós. O GTK 4
+  é a biblioteca do sistema, ligada dinamicamente (aceita pelo KalangoOS); os crates `gtk4`/`glib` são MIT.
 - Fora da lista, só em alternativas OR (escolhemos a permissiva): `ryu-js` (Apache-2.0 OR BSL-1.0),
-  `self_cell` (Apache-2.0 OR GPL-2.0-only), `r-efi` (MIT OR Apache-2.0 OR LGPL-2.1-or-later), `anymap3`
-  (BlueOak-1.0.0 OR MIT OR Apache-2.0).
-- **Só BSL-1.0:** `clipboard-win` e `error-code`, puxadas pela área de transferência do egui **apenas no
-  Windows**; não entram no binário Linux. O `deny.toml` olha só o alvo linux.
+  `r-efi` (MIT OR Apache-2.0 OR LGPL-2.1-or-later), `anymap3` (BlueOak-1.0.0 OR MIT OR Apache-2.0).
+- Os ícones de linha (`assets/ui/`) e os tokens de cor (`assets/css/tokens-*.css`) são do KalangoOS.
 - `nnnoiseless` (BSD-3-Clause) é uma reescrita do RNNoise; os pesos do modelo vêm do projeto RNNoise (BSD).
 
 ## O que esta auditoria não resolve
@@ -81,5 +80,5 @@ grep -rniE "$PADRAO" .
   com lista de sessões, quadro e inspetor) veio da reconstrução, que foi escrita olhando o programa comercial.
   Ideias e funcionalidades não são protegidas por direito autoral, e nenhum código, texto, dado ou imagem dele
   ficou; mas isto não é uma reconstrução "sala limpa" documentada. A interface nova, desenhada no Design System
-  do KalangoOS (página "26 · Kalango Audio"), substitui a disposição herdada quando for implementada.
-- O repositório continua **privado**. Torná-lo público é decisão de quem mantém o projeto, depois de ler este documento.
+  do KalangoOS (página "26 · Kalango Audio"), substituiu a disposição herdada (interface em GTK 4).
+- O repositório foi tornado público por quem mantém o projeto, depois de ler este documento.

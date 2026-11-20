@@ -1,27 +1,27 @@
 [
  {
-  "name": "Em branco",
-  "subtitle": "Comece do zero",
-  "category": "Básico",
+  "name": "Blank",
+  "subtitle": "Start from scratch",
+  "category": "Basic",
   "icon": "blank",
-  "desc": "Uma sessão vazia. Arraste blocos da biblioteca; eles se ligam sozinhos na ordem em que entram.",
+  "desc": "An empty session. Drag blocks from the library; they connect on their own in the order they come in.",
   "blocks": []
  },
  {
-  "name": "Ligações livres",
-  "subtitle": "Você liga cada fio à mão",
-  "category": "Básico",
+  "name": "Free wiring",
+  "subtitle": "You connect every wire by hand",
+  "category": "Basic",
   "icon": "wires",
   "manual": true,
-  "desc": "Sessão vazia no modo de ligação manual: nada é conectado automaticamente, bom para montar caminhos com vários ramos.",
+  "desc": "An empty session in manual wiring mode: nothing is connected automatically, good for building paths with several branches.",
   "blocks": []
  },
  {
-  "name": "Gravar aplicativo",
-  "subtitle": "O som de um programa, direto para arquivo",
-  "category": "Gravar",
+  "name": "Record an app",
+  "subtitle": "One program’s sound, straight to a file",
+  "category": "Record",
   "icon": "app",
-  "desc": "Capta só o aplicativo escolhido (navegador, player, jogo…), grava em WAV e continua tocando nos seus alto-falantes.",
+  "desc": "Captures only the chosen app (browser, player, game…), records it as WAV and keeps it playing on your speakers.",
   "blocks": [
    {
     "kind": "app_source",
@@ -49,11 +49,11 @@
   ]
  },
  {
-  "name": "Reunião online",
-  "subtitle": "Navegador + microfone, com transcrição",
-  "category": "Gravar",
+  "name": "Online meeting",
+  "subtitle": "Browser + microphone, with transcription",
+  "category": "Record",
   "icon": "meeting",
-  "desc": "Junta a chamada aberta no navegador com a sua voz, grava tudo num arquivo só e gera a transcrição em texto ao mesmo tempo. Escolha o modelo do whisper no bloco Transcrever.",
+  "desc": "Joins the call open in the browser with your voice, records everything into one file and writes the transcript at the same time. Choose the whisper model in the Transcribe block.",
   "blocks": [
    {
     "kind": "app_source",
@@ -104,11 +104,11 @@
   ]
  },
  {
-  "name": "Podcast remoto",
-  "subtitle": "Sua voz tratada + convidado por chamada",
-  "category": "Voz",
+  "name": "Remote podcast",
+  "subtitle": "Your treated voice + a guest on a call",
+  "category": "Voice",
   "icon": "podcast",
-  "desc": "Seu microfone passa por limpeza de voz e compressor; o convidado chega pelo aplicativo de chamada e você o ouve nos fones. Os dois se juntam no mixer, ganham corpo e vão para o gravador.",
+  "desc": "Your microphone goes through voice cleaning and a compressor; the guest comes through the call app and you hear them on headphones. Both meet in the mixer, get fuller and go to the recorder.",
   "blocks": [
    {
     "kind": "device_input",
@@ -179,11 +179,11 @@
   ]
  },
  {
-  "name": "Narração limpa",
-  "subtitle": "Microfone limpo, firme e claro",
-  "category": "Voz",
+  "name": "Clean narration",
+  "subtitle": "A clean, steady and clear microphone",
+  "category": "Voice",
   "icon": "mic",
-  "desc": "Para locução e tutoriais: limpeza de voz tira o ruído de fundo, o compressor iguala o volume e o equalizador “Voz clara” dá presença. Um medidor mostra o nível enquanto grava.",
+  "desc": "For voice-over and tutorials: voice cleaning removes the background noise, the compressor evens the volume and the “Clear voice” equalizer adds presence. A meter shows the level while recording.",
   "blocks": [
    {
     "kind": "device_input",
@@ -245,11 +245,11 @@
   ]
  },
  {
-  "name": "Ouvir mais alto",
-  "subtitle": "Mais volume sem distorcer",
-  "category": "Ouvir",
+  "name": "Listen louder",
+  "subtitle": "More volume without distortion",
+  "category": "Listen",
   "icon": "volume",
-  "desc": "Dá um reforço no som de um aplicativo baixo demais. O compressor no final segura os picos como um limitador. Troque o aplicativo no primeiro bloco.",
+  "desc": "Boosts the sound of an app that is too quiet. The compressor at the end holds the peaks like a limiter. Change the app in the first block.",
   "blocks": [
    {
     "kind": "app_source",
@@ -275,7 +275,7 @@
     "p": {
      "amount": 1.0,
      "speed": 0.0,
-     "makeup": 0.0
+     "makeup": 1.0
     },
     "out": [
      3
@@ -289,11 +289,11 @@
   ]
  },
  {
-  "name": "Gravar o computador",
-  "subtitle": "Tudo o que toca, num arquivo",
-  "category": "Gravar",
+  "name": "Record the computer",
+  "subtitle": "Everything that plays, in one file",
+  "category": "Record",
   "icon": "computer",
-  "desc": "Capta o som do sistema inteiro — notificações incluídas — e grava em WAV. Útil quando o áudio vem de vários programas ao mesmo tempo.",
+  "desc": "Captures the whole system’s sound — notifications included — and records it as WAV. Useful when the audio comes from several programs at once.",
   "blocks": [
    {
     "kind": "system_sound",
@@ -320,11 +320,11 @@
   ]
  },
  {
-  "name": "Rádio online",
-  "subtitle": "Transmita para um servidor Icecast",
-  "category": "Transmitir",
+  "name": "Online radio",
+  "subtitle": "Stream to an Icecast server",
+  "category": "Stream",
   "icon": "radio",
-  "desc": "Sua voz e a música de um aplicativo se juntam no mixer, passam pelo Encorpar e seguem para o servidor de rádio. Uma cópia fica gravada no computador.",
+  "desc": "Your voice and the music from an app meet in the mixer, go through Fuller sound and on to the radio server. A copy is recorded on the computer.",
   "blocks": [
    {
     "kind": "device_input",
@@ -391,11 +391,11 @@
   ]
  },
  {
-  "name": "Live RTMP",
-  "subtitle": "Áudio para YouTube, Twitch e afins",
-  "category": "Transmitir",
+  "name": "RTMP live",
+  "subtitle": "Audio for YouTube, Twitch and the like",
+  "category": "Stream",
   "icon": "live",
-  "desc": "Microfone limpo mais o som do computador, nivelados por um compressor e enviados a um servidor RTMP. Preencha o endereço e a chave da transmissão no último bloco.",
+  "desc": "A clean microphone plus the computer’s sound, levelled by a compressor and sent to an RTMP server. Fill in the stream address and key in the last block.",
   "blocks": [
    {
     "kind": "device_input",
@@ -444,11 +444,11 @@
   ]
  },
  {
-  "name": "Monitorar microfone",
-  "subtitle": "Ouça sua voz nos fones",
-  "category": "Ouvir",
+  "name": "Monitor microphone",
+  "subtitle": "Hear your voice on headphones",
+  "category": "Listen",
   "icon": "headphones",
-  "desc": "Manda o microfone direto para a saída escolhida, com medidor de nível. Use fones para evitar microfonia.",
+  "desc": "Sends the microphone straight to the chosen output, with a level meter. Use headphones to avoid feedback.",
   "blocks": [
    {
     "kind": "device_input",
@@ -474,11 +474,11 @@
   ]
  },
  {
-  "name": "Aula ou palestra",
-  "subtitle": "Grave e transcreva uma fala longa",
-  "category": "Voz",
+  "name": "Class or lecture",
+  "subtitle": "Record and transcribe a long talk",
+  "category": "Voice",
   "icon": "lecture",
-  "desc": "Para salas com ruído constante: a redução de ruído aprende o fundo, o passa-altas tira o ronco grave e o compressor iguala perguntas e respostas. Grava e transcreve ao mesmo tempo.",
+  "desc": "For rooms with constant noise: noise reduction learns the background, the high-pass removes the low rumble and the compressor evens out questions and answers. Records and transcribes at the same time.",
   "blocks": [
    {
     "kind": "device_input",

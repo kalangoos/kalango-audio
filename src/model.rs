@@ -1,4 +1,5 @@
 //! Session data: blocks on a grid, the wires between them, templates and saving.
+use crate::i18n::n_;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -71,11 +72,11 @@ pub struct Automation {
 
 /// Events an automation can react to: (id passed to scripts as `ctx.kind`, label shown in the UI).
 pub const EVENTS: [(&str, &str); 5] = [
-    ("recording_finished", "Gravação terminada"),
-    ("session_starting", "Sessão iniciada"),
-    ("session_stopped", "Sessão parada"),
-    ("timer_starting", "Agendamento começou"),
-    ("timer_stopped", "Agendamento terminou"),
+    ("recording_finished", n_("Recording finished")),
+    ("session_starting", n_("Session started")),
+    ("session_stopped", n_("Session stopped")),
+    ("timer_starting", n_("Schedule started")),
+    ("timer_stopped", n_("Schedule ended")),
 ];
 
 impl Automation {
@@ -123,43 +124,43 @@ pub struct KindInfo {
 }
 
 pub const KINDS: &[KindInfo] = &[
-    KindInfo { id: "app_source", title: "Aplicativo", desc: "Pega o som de um programa aberto", cat: Cat::Source, working: true },
-    KindInfo { id: "device_input", title: "Microfone ou entrada", desc: "Pega o som de um microfone ou interface de áudio", cat: Cat::Source, working: true },
-    KindInfo { id: "system_sound", title: "Som do sistema", desc: "Pega tudo o que o computador está tocando", cat: Cat::Source, working: true },
-    KindInfo { id: "test_tone", title: "Tom de teste", desc: "Gera um tom contínuo para testar a sessão", cat: Cat::Source, working: true },
-    KindInfo { id: "device_output", title: "Saída de áudio", desc: "Toca o som em alto-falantes ou fones", cat: Cat::Output, working: true },
-    KindInfo { id: "recorder", title: "Gravador", desc: "Salva o som em um arquivo", cat: Cat::Output, working: true },
-    KindInfo { id: "rtmp_stream", title: "Transmissão RTMP", desc: "Envia o som ao vivo para um servidor RTMP", cat: Cat::Output, working: true },
-    KindInfo { id: "radio_stream", title: "Rádio online", desc: "Envia o som para um servidor Icecast ou compatível", cat: Cat::Output, working: true },
-    KindInfo { id: "graphic_eq", title: "Equalizador gráfico", desc: "Dez faixas de frequência, de 31 Hz a 16 kHz", cat: Cat::Effect, working: true },
-    KindInfo { id: "balance", title: "Balanço", desc: "Equilibra os lados esquerdo e direito", cat: Cat::Effect, working: true },
-    KindInfo { id: "tone_control", title: "Graves e agudos", desc: "Dois controles simples de tonalidade", cat: Cat::Effect, working: true },
-    KindInfo { id: "channels", title: "Canais", desc: "Troca, junta ou isola os canais", cat: Cat::Effect, working: true },
-    KindInfo { id: "low_pass", title: "Passa-baixas", desc: "Corta as frequências altas", cat: Cat::Effect, working: true },
-    KindInfo { id: "loudness", title: "Encorpar", desc: "Compressão suave que deixa o som mais cheio", cat: Cat::Effect, working: true },
-    KindInfo { id: "stereo_widen", title: "Alargar estéreo", desc: "Abre um sinal mono entre os dois lados", cat: Cat::Effect, working: true },
-    KindInfo { id: "pan", title: "Panorama", desc: "Posiciona o som entre esquerda e direita", cat: Cat::Effect, working: true },
-    KindInfo { id: "compressor", title: "Compressor", desc: "Segura os picos e levanta as partes baixas", cat: Cat::Effect, working: true },
-    KindInfo { id: "volume", title: "Volume", desc: "Aumenta ou diminui o volume", cat: Cat::Effect, working: true },
-    KindInfo { id: "level_meter", title: "Medidor de nível", desc: "Mostra pico e média em barras", cat: Cat::Meter, working: true },
-    KindInfo { id: "needle_meter", title: "Medidor de ponteiro", desc: "Mostra o nível em um ponteiro", cat: Cat::Meter, working: true },
-    KindInfo { id: "click_removal", title: "Remover cliques", desc: "Tira estalos curtos do som", cat: Cat::Advanced, working: true },
-    KindInfo { id: "hum_removal", title: "Remover zumbido", desc: "Tira o zumbido da rede elétrica (50/60 Hz)", cat: Cat::Advanced, working: true },
-    KindInfo { id: "source_switch", title: "Alternar fonte", desc: "Escolhe qual de duas fontes passa adiante", cat: Cat::Advanced, working: true },
-    KindInfo { id: "transcribe", title: "Transcrever", desc: "Converte fala em texto enquanto grava", cat: Cat::Advanced, working: true },
-    KindInfo { id: "ladspa_plugin", title: "Plug-in LADSPA", desc: "Usa um efeito LADSPA instalado no sistema", cat: Cat::Advanced, working: true },
-    KindInfo { id: "voice_denoise", title: "Limpar voz", desc: "Remove ruído de fundo da fala (RNNoise)", cat: Cat::Advanced, working: true },
-    KindInfo { id: "convolution", title: "Convolução", desc: "Aplica uma resposta ao impulso (FIR) de um arquivo", cat: Cat::Advanced, working: true },
-    KindInfo { id: "noise_reduction", title: "Redução de ruído", desc: "Aprende o ruído de fundo e o diminui", cat: Cat::Advanced, working: true },
-    KindInfo { id: "ducking", title: "Abaixar sob voz", desc: "Abaixa as outras fontes quando alguém fala", cat: Cat::Advanced, working: true },
-    KindInfo { id: "mixer", title: "Mixer", desc: "Mistura até cinco fontes", cat: Cat::Advanced, working: true },
-    KindInfo { id: "parametric_eq", title: "EQ paramétrico", desc: "Até 16 faixas com frequência, ganho e Q", cat: Cat::Advanced, working: true },
-    KindInfo { id: "delay", title: "Atraso", desc: "Atrasa o som em milissegundos para sincronizar", cat: Cat::Advanced, working: true },
-    KindInfo { id: "time_shift", title: "Voltar no tempo", desc: "Pausa e volta o som ao vivo", cat: Cat::Advanced, working: true },
-    KindInfo { id: "high_pass", title: "Passa-altas", desc: "Corta as frequências baixas", cat: Cat::Effect, working: true },
-    KindInfo { id: "band_pass", title: "Passa-faixa", desc: "Deixa passar só uma faixa de frequências", cat: Cat::Effect, working: true },
-    KindInfo { id: "high_shelf", title: "Realce de agudos", desc: "Aumenta ou corta acima de uma frequência", cat: Cat::Effect, working: true },
-    KindInfo { id: "low_shelf", title: "Realce de graves", desc: "Aumenta ou corta abaixo de uma frequência", cat: Cat::Effect, working: true },
+    KindInfo { id: "app_source", title: n_("Application"), desc: n_("Capture the sound of an open program"), cat: Cat::Source, working: true },
+    KindInfo { id: "device_input", title: n_("Microphone or input"), desc: n_("Capture a microphone or audio interface"), cat: Cat::Source, working: true },
+    KindInfo { id: "system_sound", title: n_("System sound"), desc: n_("Capture everything the computer is playing"), cat: Cat::Source, working: true },
+    KindInfo { id: "test_tone", title: n_("Test tone"), desc: n_("Generate a steady tone to try the session"), cat: Cat::Source, working: true },
+    KindInfo { id: "device_output", title: n_("Audio output"), desc: n_("Play the sound on speakers or headphones"), cat: Cat::Output, working: true },
+    KindInfo { id: "recorder", title: n_("Recorder"), desc: n_("Save the sound to a file"), cat: Cat::Output, working: true },
+    KindInfo { id: "rtmp_stream", title: n_("RTMP stream"), desc: n_("Send the sound live to an RTMP server"), cat: Cat::Output, working: true },
+    KindInfo { id: "radio_stream", title: n_("Online radio"), desc: n_("Send the sound to an Icecast-compatible server"), cat: Cat::Output, working: true },
+    KindInfo { id: "graphic_eq", title: n_("Graphic equalizer"), desc: n_("Ten frequency bands, from 31 Hz to 16 kHz"), cat: Cat::Effect, working: true },
+    KindInfo { id: "balance", title: n_("Balance"), desc: n_("Even out the left and right sides"), cat: Cat::Effect, working: true },
+    KindInfo { id: "tone_control", title: n_("Bass and treble"), desc: n_("Two simple tone controls"), cat: Cat::Effect, working: true },
+    KindInfo { id: "channels", title: n_("Channels"), desc: n_("Swap, join or isolate the channels"), cat: Cat::Effect, working: true },
+    KindInfo { id: "low_pass", title: n_("Low-pass"), desc: n_("Cut the high frequencies"), cat: Cat::Effect, working: true },
+    KindInfo { id: "loudness", title: n_("Fuller sound"), desc: n_("Gentle compression that makes the sound fuller"), cat: Cat::Effect, working: true },
+    KindInfo { id: "stereo_widen", title: n_("Stereo widener"), desc: n_("Spread a mono signal across both sides"), cat: Cat::Effect, working: true },
+    KindInfo { id: "pan", title: n_("Pan"), desc: n_("Place the sound between left and right"), cat: Cat::Effect, working: true },
+    KindInfo { id: "compressor", title: n_("Compressor"), desc: n_("Hold the peaks and lift the quiet parts"), cat: Cat::Effect, working: true },
+    KindInfo { id: "volume", title: n_("Volume"), desc: n_("Make the sound louder or quieter"), cat: Cat::Effect, working: true },
+    KindInfo { id: "level_meter", title: n_("Level meter"), desc: n_("Show peak and average as bars"), cat: Cat::Meter, working: true },
+    KindInfo { id: "needle_meter", title: n_("Needle meter"), desc: n_("Show the level on a needle"), cat: Cat::Meter, working: true },
+    KindInfo { id: "click_removal", title: n_("Click removal"), desc: n_("Take short clicks out of the sound"), cat: Cat::Advanced, working: true },
+    KindInfo { id: "hum_removal", title: n_("Hum removal"), desc: n_("Take out mains hum (50/60 Hz)"), cat: Cat::Advanced, working: true },
+    KindInfo { id: "source_switch", title: n_("Source switch"), desc: n_("Choose which of two sources goes on"), cat: Cat::Advanced, working: true },
+    KindInfo { id: "transcribe", title: n_("Transcribe"), desc: n_("Turn speech into text while recording"), cat: Cat::Advanced, working: true },
+    KindInfo { id: "ladspa_plugin", title: n_("LADSPA plug-in"), desc: n_("Use a LADSPA effect installed on the system"), cat: Cat::Advanced, working: true },
+    KindInfo { id: "voice_denoise", title: n_("Clean voice"), desc: n_("Remove background noise from speech (RNNoise)"), cat: Cat::Advanced, working: true },
+    KindInfo { id: "convolution", title: n_("Convolution"), desc: n_("Apply an impulse response (FIR) from a file"), cat: Cat::Advanced, working: true },
+    KindInfo { id: "noise_reduction", title: n_("Noise reduction"), desc: n_("Learn the background noise and lower it"), cat: Cat::Advanced, working: true },
+    KindInfo { id: "ducking", title: n_("Duck under voice"), desc: n_("Lower the other sources when someone speaks"), cat: Cat::Advanced, working: true },
+    KindInfo { id: "mixer", title: n_("Mixer"), desc: n_("Mix up to five sources"), cat: Cat::Advanced, working: true },
+    KindInfo { id: "parametric_eq", title: n_("Parametric EQ"), desc: n_("Up to 16 bands with frequency, gain and Q"), cat: Cat::Advanced, working: true },
+    KindInfo { id: "delay", title: n_("Delay"), desc: n_("Delay the sound by milliseconds to sync it"), cat: Cat::Advanced, working: true },
+    KindInfo { id: "time_shift", title: n_("Time shift"), desc: n_("Pause and rewind the live sound"), cat: Cat::Advanced, working: true },
+    KindInfo { id: "high_pass", title: n_("High-pass"), desc: n_("Cut the low frequencies"), cat: Cat::Effect, working: true },
+    KindInfo { id: "band_pass", title: n_("Band-pass"), desc: n_("Let only one range of frequencies through"), cat: Cat::Effect, working: true },
+    KindInfo { id: "high_shelf", title: n_("Treble boost"), desc: n_("Raise or cut above a frequency"), cat: Cat::Effect, working: true },
+    KindInfo { id: "low_shelf", title: n_("Bass boost"), desc: n_("Raise or cut below a frequency"), cat: Cat::Effect, working: true },
 ];
 
 pub fn kind_info(id: &str) -> Option<&'static KindInfo> { KINDS.iter().find(|k| k.id == id) }
@@ -333,7 +334,7 @@ impl Template {
     }
 
     pub fn instantiate(&self) -> Session {
-        let mut s = Session::new(&self.name);
+        let mut s = Session::new(crate::i18n::tr(&self.name));
         s.manual = self.manual;
         let mut ids = vec![];
         for tb in &self.blocks {
@@ -392,7 +393,7 @@ pub fn load_sessions() -> Vec<Session> {
         }
     }
     let tpls = templates();
-    ["Gravar o computador", "Narração limpa", "Reunião online"]
+    ["Record the computer", "Clean narration", "Online meeting"]
         .iter()
         .filter_map(|n| tpls.iter().find(|t| &t.name == n))
         .map(|t| t.instantiate())
@@ -403,4 +404,65 @@ pub fn save_sessions(v: &[Session]) {
     let p = config_path();
     if let Some(d) = p.parent() { let _ = std::fs::create_dir_all(d); }
     if let Ok(t) = serde_json::to_string_pretty(v) { let _ = std::fs::write(p, t); }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::engine;
+
+    #[test]
+    fn file_name_tokens() {
+        let s = engine::expand_tokens("%name %counter %prefixed_counter %tag_title", "Show", 7);
+        assert!(s.starts_with("Show 7 007"));
+        let d = engine::expand_tokens("%date %time", "x", 1);
+        assert_eq!(d.len(), 19); // 2026-11-18 22.53.10
+        assert!(!engine::expand_tokens("a/b:c", "x", 1).contains('/'));
+    }
+
+    #[test]
+    fn templates_load_and_wire_up() {
+        let t = templates();
+        assert_eq!(t.len(), 12);
+        for tpl in &t {
+            let s = tpl.instantiate();
+            assert_eq!(s.blocks.len(), tpl.blocks.len());
+            for b in &s.blocks { assert!(kind_info(&b.kind).is_some(), "unknown block kind {} in {}", b.kind, tpl.name); }
+            let wires: usize = s.blocks.iter().map(|b| b.outs.len()).sum();
+            let expected: usize = tpl.blocks.iter().map(|b| b.out.len()).sum();
+            assert_eq!(wires, expected, "{}", tpl.name);
+        }
+    }
+
+    #[test]
+    fn sessions_survive_saving_and_loading() {
+        let s = templates()[3].instantiate();
+        let text = serde_json::to_string(&vec![s.clone()]).unwrap();
+        let back: Vec<Session> = serde_json::from_str(&text).unwrap();
+        assert_eq!(back[0], s);
+    }
+
+    #[test]
+    fn connecting_rules() {
+        let mut s = Session::new("t");
+        let a = s.add_block("test_tone", 0.0, 0.0);
+        let b = s.add_block("volume", 5.0, 0.0);
+        s.connect(a, b);
+        s.connect(b, a); // a source cannot take input
+        s.connect(a, a);
+        assert_eq!(s.block(a).unwrap().outs, vec![b]);
+        assert!(s.block(b).unwrap().outs.is_empty());
+        s.remove_block(b);
+        assert!(s.block(a).unwrap().outs.is_empty());
+    }
+
+    #[test]
+    fn no_template_silences_its_compressors() {
+        // make-up is a plain gain: 0 would mute everything after the compressor
+        for tpl in templates() {
+            for b in tpl.instantiate().blocks.iter().filter(|b| b.kind == "compressor" || b.kind == "loudness") {
+                assert!(b.p.num("makeup", 1.0) >= 1.0, "{}: make-up {}", tpl.name, b.p.num("makeup", 1.0));
+            }
+        }
+    }
 }

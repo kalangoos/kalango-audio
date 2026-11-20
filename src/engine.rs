@@ -1,4 +1,5 @@
 //! The audio graph: runs the blocks of a session in order, ten milliseconds at a time.
+use crate::i18n::{tr, trf};
 use crate::audio::{Stream, CHUNK};
 use crate::dsp::{db_to_lin, lin_to_db, Dsp, Frame, SR};
 use crate::media::Tags;
@@ -297,7 +298,7 @@ fn open_recording(b: &Block, session: &str, counter: u32, session_rate: u32) -> 
     let p = &b.p;
     let tags = tags_from_params(p);
     let dir = expand_home(&p.text("folder", &default_recordings_dir()));
-    std::fs::create_dir_all(&dir).map_err(|e| format!("não foi possível criar a pasta: {e}"))?;
+    std::fs::create_dir_all(&dir).map_err(|e| trf("could not create the folder: {err}", &[("err", e.to_string())]))?;
     let name = expand_tokens_with(&p.text("file_name", DEFAULT_FILE_NAME), session, counter, &tags);
     let mut fmt = p.text("format", "WAV");
     if matches!(fmt.as_str(), "MP3" | "AAC" | "ALAC" | "FLAC") && !ffmpeg_available() { fmt = "WAV".into(); }
@@ -306,7 +307,7 @@ fn open_recording(b: &Block, session: &str, counter: u32, session_rate: u32) -> 
     let channels = match p.num("q_channels", 0.0) as u16 { 1 => 1, _ => 2 };
     let mut ext = format_ext(&fmt);
     if matches!(fmt.as_str(), "AAC" | "ALAC") && p.num("q_mp4", 0.0) > 0.5 { ext = "mp4"; }
-    let path = unique_path(&dir, if name.is_empty() { "Gravação" } else { &name }, ext);
+    let path = unique_path(&dir, if name.is_empty() { tr("Recording") } else { &name }, ext);
     let ps = path.to_string_lossy().to_string();
     let depth = p.num("depth", 16.0) as u16;
     let writer = match fmt.as_str() {
@@ -515,7 +516,7 @@ impl Sink {
         let handle = std::thread::spawn(move || {
             let mut child = match std::process::Command::new("ffmpeg").args(&args).stdin(std::process::Stdio::piped()).stdout(if cast.is_some() { std::process::Stdio::piped() } else { std::process::Stdio::null() }).stderr(std::process::Stdio::piped()).spawn() {
                 Ok(c) => c,
-                Err(_) => { *n.lock().unwrap() = "o ffmpeg não está instalado".into(); a.store(false, Ordering::Relaxed); return; }
+                Err(_) => { *n.lock().unwrap() = tr("ffmpeg is not installed").into(); a.store(false, Ordering::Relaxed); return; }
             };
             p.store(child.id() as i32, Ordering::Relaxed);
             let mut stdin = child.stdin.take();
@@ -578,14 +579,14 @@ pub struct Cast {
 fn shoutcast_forward(c: Cast, mut out: std::process::ChildStdout) -> Result<(), String> {
     use std::io::Read;
     use std::net::ToSocketAddrs;
-    let addr = (c.host.as_str(), c.port).to_socket_addrs().map_err(|_| format!("servidor “{}” não encontrado", c.host))?.next().ok_or("servidor não encontrado")?;
-    let mut s = std::net::TcpStream::connect_timeout(&addr, Duration::from_secs(5)).map_err(|e| format!("sem conexão com o servidor: {e}"))?;
+    let addr = (c.host.as_str(), c.port).to_socket_addrs().map_err(|_| trf("server “{host}” not found", &[("host", c.host.clone())]))?.next().ok_or_else(|| tr("server not found").to_string())?;
+    let mut s = std::net::TcpStream::connect_timeout(&addr, Duration::from_secs(5)).map_err(|e| trf("no connection to the server: {err}", &[("err", e.to_string())]))?;
     let _ = s.set_read_timeout(Some(Duration::from_secs(5)));
     s.write_all(format!("{}\r\n", c.password).as_bytes()).map_err(|e| e.to_string())?;
     let mut resp = [0u8; 128];
-    let n = s.read(&mut resp).map_err(|_| "o servidor não respondeu".to_string())?;
+    let n = s.read(&mut resp).map_err(|_| tr("the server did not answer").to_string())?;
     let text = String::from_utf8_lossy(&resp[..n]).to_string();
-    if !text.starts_with("OK") { return Err(format!("o servidor recusou a senha ({})", text.trim().chars().take(40).collect::<String>())); }
+    if !text.starts_with("OK") { return Err(trf("the server refused the password ({answer})", &[("answer", text.trim().chars().take(40).collect::<String>())])); }
     let mut head = String::new();
     for (k, v) in &c.headers { head += &format!("{k}:{v}\r\n"); }
     head += "\r\n";
@@ -594,14 +595,14 @@ fn shoutcast_forward(c: Cast, mut out: std::process::ChildStdout) -> Result<(), 
     loop {
         let n = out.read(&mut buf).map_err(|e| e.to_string())?;
         if n == 0 { return Ok(()); }
-        s.write_all(&buf[..n]).map_err(|_| "o servidor fechou a conexão".to_string())?;
+        s.write_all(&buf[..n]).map_err(|_| tr("the server closed the connection").to_string())?;
     }
 }
 
 /// Classic Shoutcast (version 1 source protocol; Shoutcast 2 servers accept it too, with ":#stream" after the password).
 pub fn shoutcast_job(p: &crate::model::Params) -> Result<(Vec<String>, Cast), String> {
     let host = p.text("host", "");
-    if host.trim().is_empty() { return Err("informe o endereço do servidor".into()); }
+    if host.trim().is_empty() { return Err(tr("enter the server address").into()); }
     let v2 = p.text("server", "") == "Shoutcast 2";
     let sid = p.text("stream_id", "");
     let password = if v2 && !sid.trim().is_empty() { format!("{}:#{}", p.text("password", ""), sid.trim()) } else { p.text("password", "") };
@@ -628,7 +629,7 @@ fn pct_encode(s: &str) -> String {
 
 fn broadcast_args(p: &crate::model::Params) -> Result<Vec<String>, String> {
     let host = p.text("host", "");
-    if host.trim().is_empty() { return Err("informe o endereço do servidor".into()); }
+    if host.trim().is_empty() { return Err(tr("enter the server address").into()); }
     let mut mount = p.text("mount", "/stream");
     if !mount.starts_with('/') { mount.insert(0, '/'); }
     let url = format!("icecast://{}:{}@{}:{}{}", pct_encode(&p.text("user", "source")), pct_encode(&p.text("password", "")), host.trim(), p.num("port", 8000.0) as u32, mount);
@@ -648,7 +649,7 @@ fn broadcast_args(p: &crate::model::Params) -> Result<Vec<String>, String> {
 
 fn rtmp_args(p: &crate::model::Params) -> Result<Vec<String>, String> {
     let url = p.text("url", "");
-    if url.trim().is_empty() { return Err("informe o endereço do servidor RTMP".into()); }
+    if url.trim().is_empty() { return Err(tr("enter the RTMP server address").into()); }
     let key = p.text("key", "");
     let dest = if key.is_empty() { url.trim().to_string() } else { format!("{}/{}", url.trim().trim_end_matches('/'), key) };
     // our quality levels (video kbit/s, audio kbit/s): Leve for slow uplinks, Padrão for most services, Alta for good connections
@@ -694,7 +695,7 @@ fn transcribe_worker(rx: std::sync::mpsc::Receiver<Vec<Frame>>, p: crate::model:
                     *note.lock().unwrap() = text.chars().rev().take(80).collect::<Vec<_>>().into_iter().rev().collect();
                 }
             }
-            Err(_) => { *note.lock().unwrap() = "error: o whisper-cli não foi encontrado".into(); break; }
+            Err(_) => { *note.lock().unwrap() = format!("error: {}", tr("whisper-cli was not found")); break; }
         }
     }
 }
@@ -804,7 +805,7 @@ fn run(sh: Arc<Shared>, stop: Arc<AtomicBool>) {
                         if r.sink.as_ref().map(|s| !s.alive.load(Ordering::Relaxed)).unwrap_or(false) && r.started.map(|t| t.elapsed().as_secs() > 2).unwrap_or(false) {
                             // the program ended: keep its last message and try again after a few seconds
                             let note = r.sink.as_ref().map(|s| s.note.lock().unwrap().clone()).unwrap_or_default();
-                            sh.rec.lock().unwrap().insert(id, RecStatus { state: format!("error: {}", if note.is_empty() { "a transmissão parou" } else { &note }), ..Default::default() });
+                            sh.rec.lock().unwrap().insert(id, RecStatus { state: format!("error: {}", if note.is_empty() { tr("the stream stopped") } else { &note }), ..Default::default() });
                             if r.started.map(|t| t.elapsed().as_secs() > 8).unwrap_or(false) { r.sink = None; }
                         } else {
                             if r.sink.is_none() {
@@ -832,7 +833,7 @@ fn run(sh: Arc<Shared>, stop: Arc<AtomicBool>) {
                     "transcribe" => {
                         if r.sink.is_none() {
                             if b.p.text("model", "").trim().is_empty() {
-                                sh.rec.lock().unwrap().insert(id, RecStatus { state: "error: escolha um arquivo de modelo do whisper (.bin)".into(), ..Default::default() });
+                                sh.rec.lock().unwrap().insert(id, RecStatus { state: format!("error: {}", tr("choose a whisper model file (.bin)")), ..Default::default() });
                             } else {
                                 let (tx, rx) = std::sync::mpsc::sync_channel::<Vec<Frame>>(64);
                                 let note = Arc::new(Mutex::new(String::new()));

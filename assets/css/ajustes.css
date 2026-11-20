@@ -1,0 +1,21 @@
+/* Kalango Audio · ajustes */
+.ka-ajustes-nav { background: @k_bg; border-right: 1px solid @k_border; padding: 20px 10px; }
+.ka-ajustes-titulo { font-size: 18px; margin: 4px 10px 14px 10px; }
+button.ka-ajustes-item { min-height: 38px; padding: 0 10px; border-radius: 4px; transition: background-color 120ms ease; }
+button.ka-ajustes-item:hover { background: alpha(@k_realce, 0.05); }
+button.ka-ajustes-item.ativo { background: alpha(@k_accent, 0.18); }
+button.ka-ajustes-item.ativo label { color: @k_accent_text; }
+.ka-ajustes-nav-estreita { padding: 12px 20px 0 20px; }
+.ka-ajustes-conteudo { padding: 20px 24px 32px 32px; }
+.ka-ajuste-secao > .ka-titulo2 { margin-top: 2px; }
+.ka-ajuste-linha { background: @k_surface; border: 1px solid @k_border; border-radius: 6px; padding: 12px 16px; min-height: 34px; }
+.ka-caminho { background: @k_field; border: 1px solid @k_border; border-radius: 4px; min-height: 30px; padding: 0 10px; }
+.ka-fichas { background: @k_field; border: 1px solid @k_border; border-radius: 4px; min-height: 30px; padding: 0 6px; }
+button.ka-ficha { background: alpha(@k_accent, 0.16); border-radius: 4px; padding: 2px 7px; }
+button.ka-ficha label { color: @k_accent_text; font-size: 11px; font-weight: 500; }
+button.ka-ficha.texto { background: alpha(@k_realce, 0.08); }
+button.ka-ficha.texto label { color: @k_text2; }
+button.ka-ficha:hover { background: alpha(@k_accent, 0.26); }
+.ka-ajustes-direita { padding: 20px 24px 20px 0; }
+.ka-sistema-som { padding: 16px; }
+.ka-ferramenta { min-height: 20px; }

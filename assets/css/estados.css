@@ -1,0 +1,13 @@
+/* Kalango Audio · estados: first use, the sound system missing, dialogs */
+.ka-boas-vindas { padding: 24px 24px 32px 24px; }
+.ka-boas-vindas-titulo { font-size: 26px; font-weight: 600; }
+.ka-comeco { padding: 18px; }
+.ka-cartao.recomendado { border: 2px solid @k_accent; padding: 17px; }
+.ka-comeco-mais { border-radius: 6px; }
+entry.ka-pedir-grande { min-height: 42px; padding: 0 64px 0 14px; font-size: 13px; }
+.ka-verificado { padding: 14px 16px; }
+.ka-sem-som { padding: 40px 24px; }
+.ka-sem-som-icone { background: alpha(@k_red, 0.14); border-radius: 8px; }
+.ka-centro { font-size: 20px; }
+.ka-detalhes { padding: 12px 14px; }
+.ka-detalhes-titulo { font-weight: 500; color: @k_text2; margin-bottom: 4px; }
