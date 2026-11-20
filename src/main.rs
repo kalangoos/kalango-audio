@@ -11,6 +11,7 @@ mod model;
 mod presets;
 mod script;
 mod selftest;
+mod voz;
 
 /// The app icon (KalangoOS art for Kalango Audio), embedded so `--write-icon` works without installing.
 const ICON_PNG: &[u8] = include_bytes!("../assets/icons/hicolor/128x128/apps/os.kalango.Audio.png");

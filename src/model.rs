@@ -213,7 +213,6 @@ pub fn default_params(kind: &str) -> Params {
         }
         "rtmp_stream" => { p.set_text("url", ""); p.set_text("key", ""); p.set("quality", 1.0); }
         "transcribe" => {
-            p.set_text("command", "whisper-cli"); p.set_text("model", ""); p.set_text("language", "auto");
             p.set_text("folder", &crate::engine::default_transcripts_dir()); p.set_text("file_name", crate::engine::DEFAULT_TRANSCRIPT_NAME);
         }
         "recorder" => {

@@ -37,12 +37,6 @@ pub struct Prefs {
     /// new Recorder blocks pause while it is silent
     #[serde(default)]
     pub skip_silence: bool,
-    /// whisper.cpp model file (.bin) for Transcribe blocks that have none
-    #[serde(default)]
-    pub whisper_model: String,
-    /// transcription language ("" or "auto" = detect)
-    #[serde(default)]
-    pub transcribe_language: String,
 }
 
 fn sixty() -> u32 {

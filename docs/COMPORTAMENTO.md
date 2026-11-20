@@ -58,7 +58,10 @@ Descrição do comportamento do nosso código, para quem usa e para quem mexe ne
 
 ## Transcrever
 
-Usa `whisper-cli` com um modelo local; o texto é salvo na pasta de documentos (XDG) + `Kalango Audio`.
+Usa o modelo de voz local do KalangoOS (LFM3-Audio-2B), pelo `kalango-agente --json transcrever` (procurado em
+`$KALANGO_AGENTE`, `/usr/libexec/kalango-agente` e no PATH). O som vai em trechos de 15 s, então o texto aparece
+enquanto grava, uma linha `[mm:ss] texto` por trecho; trechos em silêncio não são enviados. O idioma é o do sistema.
+O texto é salvo na pasta de documentos (XDG) + `Kalango Audio`; `ctx.recording.transcribe()` grava `<gravação>.txt`.
 Nada sai do computador.
 
 ## Agenda e automações

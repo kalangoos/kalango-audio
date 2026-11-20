@@ -684,20 +684,8 @@ impl Core {
                     let _ = std::process::Command::new("xdg-open").arg(&arg).spawn();
                 }
                 "transcribe" => {
-                    // model and language from the script, else from a Transcribe block (the event's session first)
-                    let blocks: Vec<&Block> = ev
-                        .session
-                        .and_then(|u| self.sessions.iter().find(|s| s.uid == u))
-                        .into_iter()
-                        .chain(self.sessions.iter())
-                        .flat_map(|s| s.blocks.iter())
-                        .filter(|b| b.kind == "transcribe")
-                        .collect();
-                    let pick = |k: &str, given: Option<&String>| {
-                        given.filter(|v| !v.is_empty()).cloned().or_else(|| blocks.iter().map(|b| b.p.text(k, "")).find(|v| !v.is_empty())).unwrap_or_default()
-                    };
-                    let (model, language, command) = (pick("model", a.get(2)), pick("language", a.get(3)), pick("command", None));
-                    match script::transcribe_file(&arg, &command, &model, &language) {
+                    // KalangoOS's voice model, in the system's language
+                    match crate::voz::transcribe_recording(&arg) {
                         Ok(txt) => self.log.push(format!("{stamp}  {}", trf("transcribing to “{path}”", &[("path", txt.display().to_string())]))),
                         Err(e) => self.log.push(format!("{stamp}  {}", trf("could not transcribe: {err}", &[("err", e)]))),
                     }

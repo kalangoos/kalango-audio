@@ -44,7 +44,7 @@ pub fn parse_stamp(s: &str) -> Option<f64> {
     Some(t)
 }
 
-/// Reads a transcript: "[mm:ss] Speaker: text" lines (whisper's "[00:00:00.000 --> 00:00:05.000] text" too); lines
+/// Reads a transcript: "[mm:ss] Speaker: text" lines ("[00:00:00.000 --> 00:00:05.000] text" subtitle-style lines too); lines
 /// without a time become rows of their own.
 pub fn parse_transcript(s: &str) -> Vec<Line> {
     let mut out = vec![];
@@ -1669,7 +1669,7 @@ mod tests {
         assert_eq!(l[2], Line { at: None, speaker: String::new(), text: "plain line".into() });
         assert_eq!(l[3].at, Some(3723.0));
         assert_eq!(l[3].speaker, "", "a sentence before the colon is not a speaker");
-        // whisper.cpp's own output
+        // subtitle-style timed lines
         let w = parse_transcript("[00:00:01.500 --> 00:00:04.000]   Hello there.");
         assert_eq!(w[0].at, Some(1.5));
         assert_eq!(w[0].text, "Hello there.");

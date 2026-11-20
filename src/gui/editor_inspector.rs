@@ -578,6 +578,11 @@ impl Cx {
         self.add(&para(text, "ka-fraco2"));
     }
 
+    /// A note in the error colour (something the block needs and is missing).
+    fn error_note(&self, text: &str) {
+        self.add(&para(text, "ka-texto2 cor-red"));
+    }
+
     fn section(&self, text: &str) {
         let c = caps(text);
         c.set_margin_top(6);
@@ -1082,12 +1087,14 @@ fn settings(cx: &Cx) {
             cx.stream_state();
         }
         "transcribe" => {
-            cx.file(tr("Model file (whisper.cpp, .bin)"), "model", "~/models/ggml-base.bin", false);
-            cx.text(tr("Language (auto, pt, en…)"), "language", "auto", false);
-            cx.text(tr("Program"), "command", "whisper-cli", false);
+            match crate::voz::status() {
+                crate::voz::Status::Ready => cx.note(tr("KalangoOS voice model (LFM3-Audio-2B), on this computer, in the system’s language.")),
+                crate::voz::Status::NoAgent => cx.error_note(tr("The KalangoOS agent (kalango-agente) was not found")),
+                crate::voz::Status::NoModel => cx.error_note(tr("The voice model is not installed — get it in the App Center")),
+            }
             cx.file(tr("Folder"), "folder", &crate::engine::default_transcripts_dir(), true);
             cx.text(tr("File name"), "file_name", crate::engine::DEFAULT_TRANSCRIPT_NAME, false);
-            cx.note(tr("Every 10 seconds the sound becomes text and is added to a .txt file. Needs whisper.cpp (whisper-cli) installed."));
+            cx.note(tr("Every 15 seconds of sound becomes a line of text, with its time, added to a .txt file while it records."));
             cx.stream_state();
         }
         "recorder" => recorder(cx),
