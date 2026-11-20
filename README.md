@@ -6,9 +6,12 @@ Você monta uma **sessão** com blocos — **fontes** (um aplicativo, o microfon
 rádio online, transmissão RTMP) —, liga a sessão e ouve ou grava o resultado. Também transcreve a fala com um
 modelo local, roda em horários marcados e dispara automações.
 
-Escrito em Rust (eframe/egui). Licença GPL-3.0-or-later.
+Escrito em Rust, com interface em GTK 4 no visual do KalangoOS (tokens de cor, molas de animação e ícones do
+sistema; segue o tema claro/escuro e o idioma do sistema). Licença GPL-3.0-or-later.
 
 ## Rodar
+
+Precisa do GTK 4.14 ou mais novo (no Ubuntu: `libgtk-4-dev` para compilar).
 
 ```sh
 cargo run --release        # abre a janela
@@ -29,15 +32,37 @@ Em **Preferências** dá para ver o que foi encontrado; uma faixa no topo avisa 
 
 ## Primeiros passos
 
-1. **Nova sessão…** e escolha um modelo (por exemplo "Reunião online").
-2. Clique num bloco para ver os ajustes dele. No Gravador, escolha pasta e formato.
-3. **Iniciar** (Ctrl+R). Para parar, **Parar**. As gravações ficam em **Gravações**.
+1. **Nova sessão** e escolha um modelo (por exemplo "Reunião online"), ou peça na busca (Ctrl K):
+   "grave a reunião do navegador e transcreva" — o painel do agente mostra o plano e só age com a sua aprovação.
+2. No editor, arraste blocos da biblioteca para o canvas (ou para cima de um fio, para inserir no meio) e clique
+   num bloco para ver os ajustes dele no inspetor.
+3. **Iniciar** (Ctrl+R ou Espaço). Para parar, **Parar**. As gravações, com forma de onda, etiquetas e transcrição,
+   ficam em **Gravações**.
 
 ## Onde ficam as coisas
 
 - Sessões e preferências: `~/.config/kalango/audio/`
 - Gravações: a pasta de música do usuário (XDG) + `Kalango Audio`
 - Transcrições: a pasta de documentos (XDG) + `Kalango Audio`
+
+## Idioma e tema
+
+Os textos da interface são escritos em inglês no código (`tr("…")`) e traduzidos pelos catálogos em
+`locales/pt_BR/*.json`; o idioma é o do sistema (`LANGUAGE`, `LC_ALL`, `LC_MESSAGES`, `LANG`). O tema segue a
+escolha do KalangoOS (`~/.config/kalango/tema.json`: escuro, claro ou automático, e a cor de destaque) e, fora dele,
+a preferência de tema escuro do GTK.
+
+## Para quem desenvolve
+
+- `cargo test` roda os testes (o motor de áudio, o núcleo do app, as traduções e os estilos). Os testes nunca
+  escrevem na pasta pessoal: usam pastas temporárias.
+- Variáveis para conferir telas sem mexer nos seus dados: `KALANGO_AUDIO_DEMO=1` (ou `rodando`) abre com sessões
+  e gravações de exemplo numa pasta temporária (`KALANGO_AUDIO_DEMO_DIR`); `KALANGO_AUDIO_PAGINA=<página>`
+  (sessoes, modelos, editor, gravacoes, agenda, ajustes, boas-vindas, sem-som); `KALANGO_AUDIO_TEMA=claro|escuro`;
+  `KALANGO_AUDIO_TAMANHO=760x900`; `KALANGO_AUDIO_SESSAO=<nome>` (+ `KALANGO_AUDIO_SESSAO_RODAR=1`,
+  `KALANGO_AUDIO_BLOCO=<tipo>`); `KALANGO_AUDIO_PEDIDO="<pedido>"` abre o painel do agente;
+  `KALANGO_AUDIO_SEM_SOM=1` mostra o estado sem sistema de som; `KALANGO_AUDIO_CAPTURA=<arquivo.png>` (+
+  `KALANGO_AUDIO_CAPTURA_SAIR=1`) salva uma imagem da janela.
 
 ## Scripts
 

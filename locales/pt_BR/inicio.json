@@ -1,0 +1,22 @@
+{
+ "Active · not recording": "Ativa · sem gravar",
+ "Does not record · only routes the sound": "Não grava · só roteia o som",
+ "Drag blocks or start from a template": "Arraste blocos ou comece de um modelo",
+ "Last recording": "Última gravação",
+ "Not now": "Agora não",
+ "Nothing recorded yet": "Nada gravado ainda",
+ "Recording · {time}": "Gravando · {time}",
+ "Routing": "Roteamento",
+ "Scheduled · {when}": "Agendada · {when}",
+ "See all": "Ver todos",
+ "See the plan": "Ver o plano",
+ "Sound playing in {app}": "Som tocando no {app}",
+ "Start with a template": "Comece com um modelo",
+ "Stopped": "Parada",
+ "The agent can record the tab’s sound and your microphone and transcribe at the end. Nothing starts without your approval.": "O agente pode gravar o som da aba e o seu microfone e transcrever no fim. Nada começa sem a sua aprovação.",
+ "Your sessions": "Suas sessões",
+ "record the meeting in the browser and transcribe it": "grave a reunião do navegador e transcreva",
+ "with transcript": "com transcrição",
+ "{n} sessions · {a} active now · {r} recording": "{n} sessões · {a} ativas agora · {r} gravando",
+ "“{name}” deleted": "“{name}” apagada"
+}

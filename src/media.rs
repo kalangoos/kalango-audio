@@ -1,4 +1,5 @@
 //! Tags and playback for recordings (through ffprobe / ffmpeg) and the little player of the Recordings window.
+use crate::i18n::tr;
 use crate::audio::Stream;
 use std::collections::VecDeque;
 use std::io::Read;
@@ -87,7 +88,7 @@ fn ext_of(p: &Path) -> String {
 /// Writes tags (and a picture, for formats that can carry one) by copying the audio into a temporary file
 /// and moving that over the file that was there.
 pub fn write_tags(path: &Path, tags: &Tags) -> Result<(), String> {
-    if !have("ffmpeg") { return Err("é preciso ter o ffmpeg para gravar as etiquetas".into()); }
+    if !have("ffmpeg") { return Err(tr("ffmpeg is needed to write the tags").into()); }
     let ext = ext_of(path);
     let tmp = path.with_extension(format!("tagtmp.{ext}"));
     let art = Path::new(&tags.art);
@@ -101,7 +102,7 @@ pub fn write_tags(path: &Path, tags: &Tags) -> Result<(), String> {
     c.arg(&tmp);
     let out = c.stdin(Stdio::null()).output().map_err(|e| e.to_string())?;
     if !out.status.success() {
-        let msg = String::from_utf8_lossy(&out.stderr).lines().last().unwrap_or("o ffmpeg falhou").to_string();
+        let msg = String::from_utf8_lossy(&out.stderr).lines().last().unwrap_or(tr("ffmpeg failed")).to_string();
         trash_quietly(&tmp);
         return Err(msg);
     }

@@ -3,6 +3,7 @@
 //! the event kind, its session and, after a recording, the recording file).
 //! Scripts run sandboxed; whatever they ask for (start a session, trash a file…) is collected
 //! as a list of actions that the app carries out afterwards.
+use crate::i18n::{n_, tr};
 use boa_engine::{Context, Source};
 use serde::{Deserialize, Serialize};
 
@@ -52,20 +53,21 @@ pub struct Output {
     pub err: Option<String>,
 }
 
-/// What a script says it needs, from a header comment such as `// requer: gravação`.
+/// What a script says it needs, from a header comment such as `// needs: recording` (older scripts: `// requer: gravação`).
 #[derive(Clone, Copy, Default, PartialEq, Debug)]
 pub struct Needs {
     pub session: bool,
     pub recording: bool,
 }
 
-/// Reads the `// requer: …` header lines (accents optional). A recording always comes with its session.
+/// Reads the `// needs: …` (or `// requer: …`) header lines (accents optional). A recording always comes with its
+/// session.
 pub fn needs(text: &str) -> Needs {
     let mut n = Needs::default();
     for line in text.lines().map(str::trim).filter(|l| l.starts_with("//")) {
         let l = line.trim_start_matches('/').trim().to_lowercase();
-        let Some(rest) = l.strip_prefix("requer:") else { continue };
-        if rest.contains("grava") { n.recording = true; n.session = true; }
+        let Some(rest) = l.strip_prefix("needs:").or_else(|| l.strip_prefix("requer:")) else { continue };
+        if rest.contains("grava") || rest.contains("recording") { n.recording = true; n.session = true; }
         if rest.contains("sess") { n.session = true; }
     }
     n
@@ -188,60 +190,62 @@ pub fn run(text: &str, input: &Input) -> Output {
     }
 }
 
-/// Example scripts that come with Kalango Audio.
+/// Example scripts that come with Kalango Audio. Names are English msgids (shown with `tr`); automations store
+/// the English name. Keep "Stop everything and quit" last (the core's quit test runs the last one).
 pub const BUILTIN: &[(&str, &str)] = &[
-    ("Apagar gravações curtas", r#"// Gravações com menos de 3 segundos costumam ser cliques sem querer: vão para a lixeira.
-// requer: gravação
+    (n_("Delete short recordings"), r#"// Recordings shorter than 3 seconds are usually accidental clicks: they go to the trash.
+// needs: recording
 
-const LIMITE_S = 3;
-const g = ctx.recording;
-if (!g || g.seconds >= LIMITE_S)
+const LIMIT_S = 3;
+const r = ctx.recording;
+if (!r || r.seconds >= LIMIT_S)
   return;
 
-kalango.notify(`“${g.name}” tinha só ${g.seconds.toFixed(1)} s e foi para a lixeira`);
-g.trash();
+kalango.notify(`“${r.name}” was only ${r.seconds.toFixed(1)} s long and went to the trash`);
+r.trash();
 "#),
-    ("Abrir gravação no editor", r#"// Abre a gravação no editor de áudio escolhido nas Preferências.
-// requer: gravação
+    (n_("Open the recording in the editor"), r#"// Opens the recording in the audio editor chosen in Settings.
+// needs: recording
 
 if (ctx.recording) {
-  kalango.log(`abrindo ${ctx.recording.name} no editor`);
+  kalango.log(`opening ${ctx.recording.name} in the editor`);
   ctx.recording.openWith('editor');
 }
 "#),
-    ("Abrir gravação no player", r#"// Toca a gravação no reprodutor padrão do sistema.
-// requer: gravação
+    (n_("Play the recording in the player"), r#"// Plays the recording in the system's default player.
+// needs: recording
 
 if (ctx.recording)
   ctx.recording.openWith('player');
 "#),
-    ("Mostrar gravação no Arquivos", r#"// Abre a pasta da gravação no gerenciador de arquivos.
-// requer: gravação
+    (n_("Show the recording in Files"), r#"// Opens the recording's folder in the file manager.
+// needs: recording
 
 if (ctx.recording)
   ctx.recording.showInFiles();
 "#),
-    ("Avisar quando a gravação terminar", r#"// Mostra uma notificação com a duração e o tamanho do arquivo novo.
-// requer: gravação
+    (n_("Notify when a recording finishes"), r#"// Shows a notification with the new file's length and size.
+// needs: recording
 
-const g = ctx.recording;
-if (!g)
+const r = ctx.recording;
+if (!r)
   return;
 
-const min = Math.floor(g.seconds / 60);
-const seg = String(Math.round(g.seconds % 60)).padStart(2, '0');
-const mb = (g.bytes / 1048576).toFixed(1);
-kalango.notify(`Gravação pronta: ${g.name} (${min}:${seg}, ${mb} MB)`);
+const min = Math.floor(r.seconds / 60);
+const sec = String(Math.round(r.seconds % 60)).padStart(2, '0');
+const mb = (r.bytes / 1048576).toFixed(1);
+kalango.notify(`Recording ready: ${r.name} (${min}:${sec}, ${mb} MB)`);
 "#),
-    ("Transcrever ao terminar", r#"// Passa a gravação pelo whisper.cpp e salva o texto ao lado dela (.txt).
-// O modelo vem do bloco Transcrever da sessão; ou informe aqui: { model: '~/modelos/ggml-base.bin' }.
-// requer: gravação
+    (n_("Transcribe when done"), r#"// Runs the recording through whisper.cpp and saves the text next to it (.txt).
+// The model and language come from the session's Transcribe block; or give them here:
+// ctx.recording.transcribe({ model: '~/models/ggml-base.bin', language: 'pt' });
+// needs: recording
 
 if (ctx.recording)
-  ctx.recording.transcribe({ language: 'pt' });
+  ctx.recording.transcribe();
 "#),
-    ("Religar blocos da sessão", r#"// Tira todos os blocos da sessão do modo ignorado.
-// requer: sessão
+    (n_("Switch the session’s blocks back on"), r#"// Takes every block of the session out of bypass.
+// needs: session
 
 if (!ctx.session)
   return;
@@ -250,49 +254,77 @@ let n = 0;
 for (const b of ctx.session.blocks) {
   if (b.bypassed) { b.bypassed = false; n++; }
 }
-kalango.log(`${n} bloco(s) religado(s) em ${ctx.session.name}`);
+kalango.log(`${n} block(s) switched back on in ${ctx.session.name}`);
 "#),
-    ("Parar tudo e sair", r#"// Para todas as sessões (finalizando as gravações) e fecha o Kalango Audio.
+    (n_("Stop everything and quit"), r#"// Stops every session (finishing the recordings) and closes Kalango Audio.
 
 kalango.stopAll();
 kalango.quit();
 "#),
 ];
 
-pub const HELP: &str = "Scripts do Kalango Audio são JavaScript. Rodam quando uma automação dispara\n\
-(ou com “Executar agora”). Use return para encerrar antes do fim.\n\
-\n\
-ctx — o que disparou o script\n\
-  ctx.kind              recording_finished, session_starting, session_stopped,\n\
-                        timer_starting, timer_stopped ou manual\n\
-  ctx.session           a sessão do evento (ou null)\n\
-  ctx.recording         a gravação que acabou de terminar (ou null)\n\
-\n\
-Sessão\n\
-  .name, .running\n\
-  .blocks               lista de { id, title, bypassed }; mude bypassed para ignorar\n\
-                        ou religar um bloco\n\
-  .start(), .stop(), .open()   iniciar, parar, mostrar a sessão na janela\n\
-\n\
-Gravação\n\
-  .path, .name, .seconds (duração), .bytes (tamanho)\n\
-  .trash()              manda para a lixeira\n\
-  .showInFiles()        abre a pasta no gerenciador de arquivos\n\
-  .openWith('editor')   abre no editor de áudio das Preferências\n\
-  .openWith('player')   toca no reprodutor padrão\n\
-  .transcribe({ model, language })   gera um .txt ao lado (whisper.cpp)\n\
-\n\
-kalango — o aplicativo\n\
-  kalango.sessions()        todas as sessões\n\
-  kalango.session(nome)     uma sessão pelo nome (ou null)\n\
-  kalango.start(nome), kalango.stop(nome), kalango.stopAll()\n\
-  kalango.notify(texto)     notificação na área de trabalho\n\
-  kalango.log(texto)        linha no registro de scripts (console.log também serve)\n\
-  kalango.focus()           traz o Kalango Audio para a frente\n\
-  kalango.quit()            fecha o aplicativo\n\
-\n\
-Cabeçalho opcional: “// requer: gravação” ou “// requer: sessão”. Com ele, “Executar\n\
-agora” entrega a gravação mais recente e a sessão aberta ao script.";
+/// The names the built-in scripts had before they became English msgids (older saved automations use them).
+pub const LEGACY_NAMES: &[(&str, &str)] = &[
+    ("Apagar gravações curtas", "Delete short recordings"),
+    ("Abrir gravação no editor", "Open the recording in the editor"),
+    ("Abrir gravação no player", "Play the recording in the player"),
+    ("Mostrar gravação no Arquivos", "Show the recording in Files"),
+    ("Avisar quando a gravação terminar", "Notify when a recording finishes"),
+    ("Transcrever ao terminar", "Transcribe when done"),
+    ("Religar blocos da sessão", "Switch the session’s blocks back on"),
+    ("Parar tudo e sair", "Stop everything and quit"),
+];
+
+/// The current name of a script an automation refers to (an old built-in name becomes the English one).
+pub fn current_name(name: &str) -> &str {
+    LEGACY_NAMES.iter().find(|(old, _)| *old == name).map(|(_, new)| *new).unwrap_or(name)
+}
+
+/// The script API reference shown by "Script help" (translated; code stays as it is).
+pub fn help() -> String {
+    let rows: &[(&str, &str)] = &[
+        ("", tr("Kalango Audio scripts are JavaScript. They run when an automation fires (or with “Run now”). Use return to finish early.")),
+        ("", ""),
+        ("ctx", tr("what fired the script")),
+        ("  ctx.kind", tr("recording_finished, session_starting, session_stopped, timer_starting, timer_stopped or manual")),
+        ("  ctx.session", tr("the event’s session (or null)")),
+        ("  ctx.recording", tr("the recording that just finished (or null)")),
+        ("", ""),
+        (tr("Session"), ""),
+        ("  .name, .running", ""),
+        ("  .blocks", tr("list of { id, title, bypassed }; change bypassed to bypass a block or switch it back on")),
+        ("  .start(), .stop(), .open()", tr("start, stop, show the session in the window")),
+        ("", ""),
+        (tr("Recording"), ""),
+        ("  .path, .name, .seconds, .bytes", tr("file, name, length and size")),
+        ("  .trash()", tr("moves it to the trash")),
+        ("  .showInFiles()", tr("opens its folder in the file manager")),
+        ("  .openWith('editor')", tr("opens it in the audio editor from Settings")),
+        ("  .openWith('player')", tr("plays it in the default player")),
+        ("  .transcribe({ model, language })", tr("writes a .txt next to it (whisper.cpp)")),
+        ("", ""),
+        ("kalango", tr("the app")),
+        ("  kalango.sessions()", tr("every session")),
+        ("  kalango.session(name)", tr("a session by name (or null)")),
+        ("  kalango.start(name), kalango.stop(name), kalango.stopAll()", ""),
+        ("  kalango.notify(text)", tr("a desktop notification")),
+        ("  kalango.log(text)", tr("a line in the script log (console.log works too)")),
+        ("  kalango.focus()", tr("brings Kalango Audio to the front")),
+        ("  kalango.quit()", tr("closes the app")),
+        ("", ""),
+        ("", tr("Optional header: “// needs: recording” or “// needs: session”. With it, “Run now” gives the script the latest recording and the open session.")),
+    ];
+    let mut out = String::new();
+    for (code, text) in rows {
+        match (code.is_empty(), text.is_empty()) {
+            (true, true) => out.push('\n'),
+            (true, false) => out.push_str(&format!("{text}\n")),
+            (false, true) => out.push_str(&format!("{code}\n")),
+            (false, false) => out.push_str(&format!("{code:<34} {text}\n")),
+        }
+    }
+    out.trim_end().to_string()
+}
 
 #[cfg(test)]
 mod tests {
@@ -351,6 +383,19 @@ mod tests {
         assert_eq!(needs("// Requer: sessao"), Needs { session: true, recording: false });
         assert_eq!(needs("kalango.quit(); // requer: gravação no meio não conta? conta só se a linha começa com //"), Needs::default());
         assert_eq!(needs(""), Needs::default());
+        assert_eq!(needs("// needs: recording"), Needs { session: true, recording: true });
+        assert_eq!(needs("// Needs: session"), Needs { session: true, recording: false });
+    }
+
+    #[test]
+    fn old_built_in_names_map_to_the_new_ones() {
+        for (old, new) in LEGACY_NAMES {
+            assert_eq!(current_name(old), *new);
+            assert!(BUILTIN.iter().any(|(n, _)| n == new), "{new} is not a built-in");
+        }
+        assert_eq!(current_name("Mine"), "Mine");
+        assert_eq!(BUILTIN.last().unwrap().0, "Stop everything and quit");
+        assert!(help().contains("ctx.recording") && help().contains("kalango.quit()"));
     }
 
     #[test]
@@ -360,16 +405,16 @@ mod tests {
             let o = run(text, &input());
             assert!(o.err.is_none(), "{name}: {:?}", o.err);
         }
-        assert_eq!(ids(&run(by("Apagar gravações curtas"), &input())), vec!["notify", "trash"]);
+        assert_eq!(ids(&run(by("Delete short recordings"), &input())), vec!["notify", "trash"]);
         let mut long = input();
         long.recording.as_mut().unwrap().seconds = 3.0;
-        assert!(run(by("Apagar gravações curtas"), &long).acts.is_empty(), "3 s is long enough to keep");
-        assert_eq!(ids(&run(by("Parar tudo e sair"), &input())), vec!["stop_all", "quit"]);
-        assert_eq!(ids(&run(by("Abrir gravação no editor"), &input())), vec!["log", "open_editor"]);
-        assert_eq!(ids(&run(by("Mostrar gravação no Arquivos"), &input())), vec!["show_in_files"]);
-        assert_eq!(ids(&run(by("Transcrever ao terminar"), &input())), vec!["transcribe"]);
-        assert_eq!(run(by("Avisar quando a gravação terminar"), &input()).acts[0][1], "Gravação pronta: a.wav (0:02, 2.0 MB)");
-        assert_eq!(run(by("Religar blocos da sessão"), &input()).blocks, vec![("Show".to_string(), 8, false)]);
+        assert!(run(by("Delete short recordings"), &long).acts.is_empty(), "3 s is long enough to keep");
+        assert_eq!(ids(&run(by("Stop everything and quit"), &input())), vec!["stop_all", "quit"]);
+        assert_eq!(ids(&run(by("Open the recording in the editor"), &input())), vec!["log", "open_editor"]);
+        assert_eq!(ids(&run(by("Show the recording in Files"), &input())), vec!["show_in_files"]);
+        assert_eq!(ids(&run(by("Transcribe when done"), &input())), vec!["transcribe"]);
+        assert_eq!(run(by("Notify when a recording finishes"), &input()).acts[0][1], "Recording ready: a.wav (0:02, 2.0 MB)");
+        assert_eq!(run(by("Switch the session’s blocks back on"), &input()).blocks, vec![("Show".to_string(), 8, false)]);
         let mut none = input();
         none.recording = None;
         none.session = None;

@@ -1,4 +1,5 @@
 //! Sound card access through the system's ALSA library, loaded at run time (no build-time dependency).
+use crate::i18n::{tr, trf};
 use crate::dsp::Frame;
 use libloading::Library;
 use std::collections::VecDeque;
@@ -47,14 +48,14 @@ const ACCESS_RW_INTERLEAVED: c_int = 3;
 pub const CHUNK: usize = 480; // 10 ms at 48 kHz
 
 fn open(name: &str, capture: bool) -> Result<Pcm, String> {
-    let a = alsa().ok_or("A biblioteca de som do sistema (ALSA) não foi encontrada")?;
-    let cname = CString::new(name).map_err(|_| "bad device name")?;
+    let a = alsa().ok_or_else(|| tr("The system’s sound library (ALSA) was not found").to_string())?;
+    let cname = CString::new(name).map_err(|_| tr("Invalid device name").to_string())?;
     let mut h: *mut c_void = std::ptr::null_mut();
     unsafe {
         let r = (a.open)(&mut h, cname.as_ptr(), if capture { 1 } else { 0 }, 0);
-        if r < 0 { return Err(format!("Não foi possível abrir “{name}”")); }
+        if r < 0 { return Err(trf("Could not open “{name}”", &[("name", name.to_string())])); }
         let r = (a.set_params)(h, FORMAT_FLOAT_LE, ACCESS_RW_INTERLEAVED, 2, 48000, 1, 80_000);
-        if r < 0 { (a.close)(h); return Err(format!("“{name}” não aceita áudio estéreo")); }
+        if r < 0 { (a.close)(h); return Err(trf("“{name}” does not take stereo audio", &[("name", name.to_string())])); }
     }
     Ok(Pcm(h))
 }
@@ -119,7 +120,7 @@ impl Drop for Stream {
 
 /// Devices the person can pick: the system default plus each sound card.
 pub fn list_devices() -> Vec<(String, String)> {
-    let mut v = vec![("default".to_string(), "Padrão do sistema".to_string())];
+    let mut v = vec![("default".to_string(), tr("System default").to_string())];
     if let Ok(t) = std::fs::read_to_string("/proc/asound/cards") {
         for line in t.lines() {
             let l = line.trim_start();
@@ -248,9 +249,9 @@ pub fn installed_apps() -> &'static [DesktopApp] { INSTALLED.get_or_init(|| inst
 /// The program a block listens to, in words: "desktop:firefox" -> "Firefox".
 pub fn app_label(want: &str) -> String {
     match want {
-        "Web Browser" => "Navegador (qualquer um)".into(),
-        "Any Application" => "Qualquer programa".into(),
-        "Call App" => "Chamada de vídeo (Zoom, Skype, Teams…)".into(),
+        "Web Browser" => tr("Browser (any)").into(),
+        "Any Application" => tr("Any program").into(),
+        "Call App" => tr("Video call (Zoom, Skype, Teams…)").into(),
         w => {
             if let Some(id) = w.strip_prefix("desktop:") { return installed_apps().iter().find(|a| a.id == id).map(|a| a.name.clone()).unwrap_or_else(|| id.to_string()); }
             if let Some(n) = w.strip_prefix("name:") { let mut c = n.chars(); return c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default(); }
@@ -333,7 +334,7 @@ mod tests {
         assert!(app_matches_in("Any Application", &sp, &apps));
         assert!(app_matches_in("Firefox", &ff, &apps), "older saved choices (a plain name) still work");
         assert_eq!(app_label("name:spotify"), "Spotify");
-        assert_eq!(app_label("Call App"), "Chamada de vídeo (Zoom, Skype, Teams…)");
+        assert_eq!(app_label("Call App"), "Video call (Zoom, Skype, Teams…)");
     }
 }
 
@@ -410,7 +411,7 @@ impl Stream {
                     for a in &found {
                         if !readers.iter().any(|(ser, _)| *ser == a.serial) { readers.push((a.serial.clone(), Reader::start(&a.serial))); }
                     }
-                    *e.lock().unwrap() = if readers.is_empty() { Some(format!("Esperando “{}” tocar algum som", app_label(&want))) } else { None };
+                    *e.lock().unwrap() = if readers.is_empty() { Some(trf("Waiting for “{app}” to play some sound", &[("app", app_label(&want))])) } else { None };
                 }
                 // mix 10 ms from every stream into the output queue
                 let mut mix = vec![[0f32; 2]; CHUNK];

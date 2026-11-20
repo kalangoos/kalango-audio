@@ -1,0 +1,42 @@
+/* Kalango Audio · gravacoes */
+.ka-grav-lista { padding-right: 16px; }
+.ka-grav-detalhe { border-left: 1px solid @k_border; padding: 24px 24px 20px 24px; }
+.ka-grav-detalhe.ka-grav-pagina-detalhe { border-left: none; padding: 20px 24px; }
+.ka-grav-titulo { font-size: 18px; font-weight: 600; }
+
+/* rows */
+.ka-grav-linha { padding: 0 12px 0 10px; min-height: 64px; border-radius: 6px; border: 1px solid transparent; transition: background-color 120ms ease, border-color 120ms ease; }
+.ka-grav-linha:hover { background: alpha(@k_realce, 0.03); }
+.ka-grav-linha.selecionado { background: @k_surface; border-color: @k_divider; }
+button.ka-grav-tocar { min-width: 32px; min-height: 32px; padding: 0; border-radius: 4px; background: @k_control; transition: background-color 120ms ease; }
+button.ka-grav-tocar:hover { background: @k_raised; }
+button.ka-grav-tocar.tocando { background: @k_accent; }
+.ka-grav-trecho { color: @k_accent_text; font-style: italic; }
+
+/* detail */
+button.ka-grav-tocar-grande { min-width: 44px; min-height: 44px; padding: 0; border-radius: 6px; background: @k_control; }
+button.ka-grav-tocar-grande:hover { background: @k_raised; }
+button.ka-grav-tocar-grande.tocando { background: @k_accent; }
+button.ka-grav-transporte { min-width: 32px; min-height: 32px; background: @k_control; }
+button.ka-grav-transporte:hover { background: @k_raised; }
+button.ka-grav-etiqueta { padding: 0; border-radius: 4px; }
+button.ka-grav-etiqueta:hover label { text-decoration-line: line-through; }
+.ka-grav-etiquetas flowboxchild { padding: 0; min-width: 0; min-height: 0; }
+entry.ka-grav-nova-etiqueta { background: none; border: 1px dashed @k_divider; border-radius: 4px; min-height: 20px; padding: 0 7px; font-size: 11px; color: @k_text; box-shadow: none; outline: none; }
+entry.ka-grav-nova-etiqueta:focus-within { border-color: @k_accent; border-style: solid; }
+.ka-grav-fala { padding: 8px 8px; border-radius: 6px; transition: background-color 180ms ease; }
+.ka-grav-fala:hover { background: alpha(@k_realce, 0.03); }
+.ka-grav-fala.atual { background: @k_surface2; }
+.ka-grav-fala.atual > label { color: @k_accent_text; }
+.ka-grav-quem { font-size: 12px; font-weight: 600; color: @k_text; }
+
+/* the "more" menu */
+popover.ka-grav-menu > contents { padding: 4px; }
+button.ka-grav-item { min-height: 30px; padding: 0 10px; border-radius: 6px; }
+button.ka-grav-item:hover { background: @k_raised; }
+
+.ka-grav-vazio { padding: 48px 16px; }
+
+/* filter chips are GtkToggleButtons, whose CSS node is "button.toggle" (base.css styles "togglebutton") */
+button.toggle.ka-filtro:checked { background: alpha(@k_accent, 0.18); }
+button.toggle.ka-filtro:checked label { color: @k_accent_text; }

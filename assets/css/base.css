@@ -1,0 +1,153 @@
+/* Kalango Audio · base. Only Design System tokens (@k_*); no shadows; corners 8 (windows, panels), 6 (cards), 4
+   (controls); circles only for switches, dots and avatars. Follows the KalangoOS shell's sheet. */
+
+window.ka-janela { background: @k_bg; color: @k_text; font-family: "Inter", "Roboto", "Cantarell", sans-serif; font-size: 13px; border: 1px solid @k_border; border-radius: 6px; }
+window.ka-janela.maximized, window.ka-janela.fullscreen { border-radius: 0; border: none; }
+window.ka-janela:backdrop .ka-raiz { opacity: 0.92; }
+button { all: unset; }
+text > placeholder { opacity: 1; color: @k_muted; }
+label { color: @k_text; }
+
+/* text styles */
+.ka-titulo-app { font-size: 13px; font-weight: 600; }
+.ka-titulo { font-size: 22px; font-weight: 600; }
+.ka-titulo2 { font-size: 15px; font-weight: 600; }
+.ka-titulo3 { font-size: 13px; font-weight: 600; }
+.ka-texto { font-size: 13px; }
+.ka-texto2 { font-size: 12px; color: @k_text2; }
+.ka-fraco { font-size: 12px; color: @k_muted; }
+.ka-fraco2 { font-size: 11px; color: @k_dim; }
+.ka-valor { font-size: 12px; font-weight: 500; font-feature-settings: "tnum"; }
+.ka-caps { font-size: 10px; font-weight: 600; letter-spacing: 1px; color: @k_dim; }
+.ka-link { font-size: 12px; font-weight: 500; color: @k_accent_text; }
+.ka-mono { font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; font-size: 12px; }
+.ka-tnum { font-feature-settings: "tnum"; }
+
+/* the chrome: rail, bar, pages */
+.ka-trilho { background: @k_base; border-right: 1px solid @k_border; min-width: 44px; padding: 12px 10px; }
+.ka-trilho-linha { background: @k_border; min-height: 1px; margin: 4px 6px 8px 6px; }
+button.ka-trilho-botao { min-width: 44px; min-height: 40px; padding: 0; border-radius: 4px; transition: background-color 120ms ease; }
+button.ka-trilho-botao:hover { background: alpha(@k_realce, 0.06); }
+button.ka-trilho-botao.ativo { background-color: alpha(@k_accent, 0.18); background-image: linear-gradient(@k_accent, @k_accent); background-size: 3px 16px; background-position: left center; background-repeat: no-repeat; }
+.ka-barra { background: @k_bg; min-height: 48px; padding: 0 10px 0 12px; border-bottom: 1px solid @k_border; }
+entry.ka-pedir { background: @k_field; border: 1px solid @k_border; border-radius: 4px; box-shadow: none; outline: none; min-height: 30px; padding: 0 56px 0 10px; font-size: 12px; color: @k_text; }
+entry.ka-pedir:focus-within { border-color: @k_accent; }
+.ka-atalho { background: @k_control; border-radius: 4px; padding: 1px 6px; font-size: 11px; color: @k_muted; }
+button.ka-controle-janela { min-width: 16px; min-height: 16px; padding: 0; border-radius: 4px; background: @k_surface2; }
+button.ka-controle-janela:hover { background: @k_raised; }
+.ka-paginas { background: @k_bg; }
+.ka-pagina { padding: 20px 24px; }
+
+/* buttons */
+button.ka-botao { min-height: 30px; padding: 0 12px; border-radius: 4px; font-size: 12px; font-weight: 500; transition: background-color 120ms ease, opacity 120ms ease; }
+button.ka-botao.ka-so-icone { padding: 0; min-width: 30px; }
+button.ka-botao:disabled { opacity: 0.45; }
+button.ka-primario { background: @k_accent; }
+button.ka-primario label { color: @k_accent_fg; }
+button.ka-primario:hover { background: shade(@k_accent, 1.06); }
+button.ka-secundario { background: @k_control; }
+button.ka-secundario label { color: @k_text; }
+button.ka-secundario:hover { background: @k_raised; }
+button.ka-fantasma { background: none; }
+button.ka-fantasma label { color: @k_text2; }
+button.ka-fantasma:hover { background: alpha(@k_realce, 0.06); }
+button.ka-gravar, button.ka-perigo { background: @k_red; }
+button.ka-gravar label, button.ka-perigo label { color: @k_accent_fg; }
+button.ka-gravar:hover, button.ka-perigo:hover { background: shade(@k_red, 1.06); }
+button.ka-icone, menubutton.ka-icone > button { min-width: 28px; min-height: 28px; padding: 0; border-radius: 4px; background: none; }
+button.ka-icone:hover, menubutton.ka-icone > button:hover { background: alpha(@k_realce, 0.06); }
+
+/* cards and rows */
+.ka-cartao { background: @k_surface; border: 1px solid @k_border; border-radius: 6px; transition: border-color 120ms ease; }
+.ka-cartao:hover { border-color: @k_divider; }
+.ka-cartao.selecionado { border: 2px solid @k_accent; }
+.ka-cartao.gravando { border-color: alpha(@k_red, 0.55); }
+.ka-cartao2 { background: @k_surface2; border: 1px solid @k_border; border-radius: 6px; }
+.ka-poco { background: @k_sunken; border-radius: 6px; }
+.ka-tracejado { border: 1px dashed @k_divider; border-radius: 6px; }
+.ka-tracejado:hover { border-color: @k_accent; }
+.ka-linha-div { background: @k_border; min-height: 1px; min-width: 1px; }
+.ka-sugestao { background: alpha(@k_accent, 0.08); border: 1px solid alpha(@k_accent, 0.35); border-radius: 6px; padding: 12px; }
+
+/* tiles, chips, dots: one colour class per token */
+.ka-tile { border-radius: 6px; }
+.ka-cadeia-liga { background: @k_divider; min-height: 1px; }
+.ka-chip { border-radius: 4px; padding: 2px 7px; font-size: 11px; font-weight: 500; }
+.ka-ponto { min-width: 8px; min-height: 8px; border-radius: 99px; }
+.cor-accent.ka-tile, .cor-accent.ka-chip { background: alpha(@k_accent, 0.16); color: @k_accent_text; }
+.cor-teal.ka-tile, .cor-teal.ka-chip { background: alpha(@k_teal, 0.16); color: @k_teal; }
+.cor-gold.ka-tile, .cor-gold.ka-chip { background: alpha(@k_gold, 0.16); color: @k_gold; }
+.cor-blue.ka-tile, .cor-blue.ka-chip { background: alpha(@k_blue, 0.16); color: @k_blue; }
+.cor-purple.ka-tile, .cor-purple.ka-chip { background: alpha(@k_purple, 0.16); color: @k_purple; }
+.cor-coral.ka-tile, .cor-coral.ka-chip { background: alpha(@k_coral, 0.16); color: @k_coral; }
+.cor-red.ka-tile, .cor-red.ka-chip { background: alpha(@k_red, 0.16); color: @k_red; }
+.cor-text2.ka-chip, .cor-muted.ka-chip { background: alpha(@k_realce, 0.08); color: @k_text2; }
+.cor-accent.ka-ponto { background: @k_accent; }
+.cor-teal.ka-ponto { background: @k_teal; }
+.cor-gold.ka-ponto { background: @k_gold; }
+.cor-red.ka-ponto { background: @k_red; }
+.cor-dim.ka-ponto, .cor-muted.ka-ponto { background: @k_dim; }
+.cor-red { color: @k_red; }
+.cor-teal { color: @k_teal; }
+.cor-gold { color: @k_gold; }
+
+/* filter chips (toggle buttons) */
+togglebutton.ka-filtro, button.ka-filtro, button.toggle.ka-filtro { background: @k_control; border-radius: 4px; padding: 0 12px; min-height: 28px; font-size: 12px; font-weight: 500; }
+togglebutton.ka-filtro label, button.ka-filtro label { color: @k_text2; }
+togglebutton.ka-filtro:checked, button.ka-filtro.ativo, button.toggle.ka-filtro:checked { background: alpha(@k_accent, 0.18); }
+togglebutton.ka-filtro:checked label, button.ka-filtro.ativo label, button.toggle.ka-filtro:checked label { color: @k_accent_text; }
+
+/* fields, drop-downs, sliders, switches (the system's) */
+entry.ka-campo { background: @k_field; border: 1px solid @k_border; border-radius: 4px; box-shadow: none; outline: none; min-height: 30px; padding: 0 10px; font-size: 12px; color: @k_text; }
+entry.ka-campo:focus-within { border-color: @k_accent; }
+dropdown.ka-seletor > button { background: @k_field; border: 1px solid @k_border; border-radius: 4px; min-height: 30px; padding: 0 10px; font-size: 12px; }
+dropdown.ka-seletor > button label { color: @k_text; }
+dropdown.ka-seletor > button:hover { border-color: @k_divider; }
+textview.ka-codigo, textview.ka-codigo text { background: @k_sunken; color: @k_text; font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; font-size: 12px; }
+scale { padding: 0; }
+scale trough { background-image: none; background-color: @k_control; border: none; border-radius: 3px; min-height: 4px; }
+scale highlight { background-image: none; background-color: @k_accent; border: none; border-radius: 3px; margin: 0; min-height: 4px; }
+scale slider { background: @k_knob; border-radius: 99px; min-width: 14px; min-height: 14px; margin: -5px 0; border: 1px solid @k_knob_borda; box-shadow: none; }
+scale.vertical trough { min-width: 4px; min-height: 0; }
+scale.vertical highlight { min-width: 4px; min-height: 0; }
+scale.vertical slider { margin: 0 -5px; }
+switch { background: @k_control; border-radius: 99px; border: none; min-width: 30px; min-height: 18px; }
+switch:checked { background: @k_accent; }
+switch slider { background: @k_knob; border-radius: 99px; min-width: 14px; min-height: 14px; margin: 2px; border: 1px solid @k_knob_borda; box-shadow: none; }
+switch image { color: transparent; }
+checkbutton check { background: @k_field; border: 1px solid @k_divider; border-radius: 4px; min-width: 14px; min-height: 14px; }
+checkbutton check:checked { background: @k_accent; border-color: @k_accent; color: @k_accent_fg; }
+checkbutton label { color: @k_text2; font-size: 12px; }
+
+/* popovers and menus (the system's) */
+popover > contents { background: @k_panel; color: @k_text; border: 1px solid @k_border; border-radius: 8px; padding: 6px; box-shadow: none; }
+popover > arrow { background: @k_panel; border: 1px solid @k_border; }
+popover.menu modelbutton { min-height: 30px; padding: 0 10px; border-radius: 6px; color: @k_text; font-size: 13px; }
+popover.menu modelbutton:hover, popover.menu modelbutton:selected { background: @k_raised; }
+popover.menu modelbutton accelerator { color: @k_dim; font-size: 12px; margin-left: 28px; }
+popover.menu separator { background: @k_border; min-height: 1px; margin: 4px 6px; }
+popover listview > row, popover list > row { min-height: 30px; padding: 0 10px; border-radius: 6px; color: @k_text; }
+popover listview > row:hover, popover listview > row:selected { background: @k_raised; }
+scrollbar { background: transparent; border: none; }
+scrollbar slider { background: alpha(@k_realce, 0.18); border-radius: 99px; min-width: 6px; min-height: 6px; }
+tooltip, tooltip.background { background: @k_raised; border-radius: 4px; border: none; box-shadow: none; }
+tooltip label { color: @k_text; font-size: 12px; }
+
+/* toasts, dialogs, veil */
+.ka-aviso { background: @k_raised; border-radius: 6px; padding: 10px 12px 10px 16px; min-height: 36px; }
+.ka-aviso-texto { font-size: 13px; }
+.ka-veu { background: alpha(@k_scrim, 0.55); }
+.ka-dialogo { background: @k_surface; border: 1px solid @k_border; border-radius: 8px; padding: 20px; }
+.ka-medidor, .ka-onda { background: transparent; }
+
+/* text links (Open, See all) */
+button.ka-link-botao { padding: 2px 0; border-radius: 4px; }
+button.ka-link-botao label { color: @k_accent_text; font-size: 12px; font-weight: 500; }
+button.ka-link-botao.fraco label { color: @k_muted; }
+button.ka-link-botao:hover label { text-decoration: underline; }
+button.ka-item-menu { min-height: 30px; padding: 0 10px; border-radius: 6px; }
+button.ka-item-menu label { color: @k_text; font-size: 13px; }
+button.ka-item-menu:hover { background: @k_raised; }
+button.ka-nova-sessao { min-height: 214px; }
+button.ka-modelo-mini { padding: 18px 14px; }
+button.ka-modelo-mini:hover { border-color: @k_divider; }

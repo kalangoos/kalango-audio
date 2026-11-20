@@ -1,0 +1,14 @@
+/* Kalango Audio · agente */
+.ka-agente { background: @k_surface; border: 1px solid @k_border; border-radius: 8px; }
+.ka-agente-topo { padding: 12px 14px 12px 16px; border-bottom: 1px solid @k_border; min-height: 28px; }
+.ka-agente-corpo { padding: 16px; }
+.ka-agente-pedido { background: @k_control; border-radius: 6px; padding: 10px 12px; font-size: 12px; }
+.ka-agente-sessao { padding: 12px 14px; }
+.ka-agente-passo { padding: 12px 14px; }
+.ka-agente-passo.desligado { opacity: 0.5; }
+.ka-agente-numero { min-width: 18px; color: @k_text2; font-weight: 600; font-size: 12px; }
+.ka-agente-limites { border: 1px solid @k_divider; border-radius: 6px; padding: 12px 14px; background: alpha(@k_accent, 0.05); }
+.ka-agente-rodape { padding: 12px 14px; border-top: 1px solid @k_border; }
+button.ka-agente-exemplo { background: @k_control; border-radius: 4px; padding: 6px 10px; }
+button.ka-agente-exemplo label { color: @k_text2; font-size: 12px; }
+button.ka-agente-exemplo:hover { background: @k_raised; }
