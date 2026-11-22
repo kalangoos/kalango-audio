@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/marca/logo-kalango-audio.png" alt="Logo do Kalango Audio" width="200">
+</p>
+
 # Kalango Audio
 
 Ferramenta nativa do [KalangoOS](https://github.com/kalangoos) para capturar, tratar, rotear e gravar som.
