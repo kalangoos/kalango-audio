@@ -14,7 +14,7 @@ use crate::weights::{BlockKind, Checkpoint, Config, Tensor, MAMBA_CONV, MAMBA_ST
 use crate::Error;
 
 mod forward;
-pub use forward::Fft;
+pub use forward::{Fft, Trace};
 
 /// Rows per group of sequences in a long clip.
 const GROUP_ROWS: usize = 2048;
@@ -381,6 +381,8 @@ impl Network {
 
 /// Reusable buffers for one network run of up to `rows` tokens per group.
 pub struct Scratch {
+    /// When set, the forward pass records the band tokens after the encoder and each block.
+    pub trace: Option<Vec<Vec<f32>>>,
     a: Vec<f32>,
     qkv: Vec<f32>,
     o: Vec<f32>,
@@ -416,6 +418,7 @@ impl Scratch {
         let maxw = net.edges.iter().map(|(s, e)| e - s).max().unwrap_or(1);
         let per_thread_len = attention.max(frames * 2 * maxw + 2 * frames * w).max(frames * (2 * w + 4 * maxw));
         Scratch {
+            trace: None,
             a: vec![0.0; rows * w],
             qkv: vec![0.0; rows * 3 * w],
             o: vec![0.0; rows * w],

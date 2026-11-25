@@ -292,7 +292,8 @@ impl Realtime {
     }
 
     fn trim(&mut self) {
-        let keep_from = self.released + self.n / 2;
+        // never past the next frame's first slot: frames still to come write from `emitted * hop` on
+        let keep_from = (self.released + self.n / 2).min(self.emitted * self.hop);
         if keep_from > self.ola_base {
             let shift = keep_from - self.ola_base;
             let len = self.ola.len();

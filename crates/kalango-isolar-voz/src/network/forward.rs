@@ -500,6 +500,14 @@ impl Network {
         ba.lin2.apply(pool, &s.big, 4 * w, rows, x, w, true);
     }
 
+    /// Records the band tokens `[band][frame][width]` when tracing.
+    fn tap(&self, s: &mut Scratch, frames: usize) {
+        let len = self.bands() * frames * self.cfg.width;
+        if let Some(trace) = s.trace.as_mut() {
+            trace.push(s.x[..len].to_vec());
+        }
+    }
+
     fn run_blocks(&self, pool: &Pool, s: &mut Scratch, frames: usize, mut stream: Option<&mut StreamState>) {
         let (w, bands) = (self.cfg.width, self.bands());
         let tokens = bands * frames;
@@ -546,6 +554,11 @@ impl Network {
                     transpose(pool, &xt[..tokens * w], &mut x[..tokens * w], frames, bands, w);
                     mi += 1;
                 }
+            }
+            if s.trace.is_some() {
+                s.x = x;
+                self.tap(s, frames);
+                x = std::mem::take(&mut s.x);
             }
         }
         s.x = x;
@@ -630,6 +643,7 @@ impl Network {
     ) {
         assert!(frames * self.bands() * self.cfg.width <= s.x.len(), "scratch pequeno demais para {frames} quadros");
         self.encode(pool, s, spec, frames);
+        self.tap(s, frames);
         self.run_blocks(pool, s, frames, stream);
         self.decode(pool, s, frames, raw);
     }
@@ -637,6 +651,25 @@ impl Network {
     /// Upstream's whole-clip `VoiceIsolatorNetwork.forward`: STFT (centred, reflect-padded), network, look-ahead read
     /// (causal models), correction, iSTFT, added to the input.
     pub fn forward_clip(&self, pool: &Pool, s: &mut Scratch, fft: &mut Fft, audio: &[f32]) -> Vec<f32> {
+        let (spec, frames) = self.stft_clip(fft, audio);
+        let mut raw = vec![0f32; frames * self.cfg.bins() * 4];
+        self.run(pool, s, &spec, frames, None, &mut raw);
+        self.synthesize_clip(fft, audio, &spec, &raw, frames)
+    }
+
+    /// The same pass as [`Network::forward_clip`] keeping the intermediate tensors, to compare with a reference.
+    pub fn trace_clip(&self, pool: &Pool, s: &mut Scratch, fft: &mut Fft, audio: &[f32]) -> Trace {
+        let (spec, frames) = self.stft_clip(fft, audio);
+        let mut raw = vec![0f32; frames * self.cfg.bins() * 4];
+        s.trace = Some(Vec::new());
+        self.run(pool, s, &spec, frames, None, &mut raw);
+        let stages = s.trace.take().unwrap_or_default();
+        let out = self.synthesize_clip(fft, audio, &spec, &raw, frames);
+        Trace { frames, spec, stages, raw, out }
+    }
+
+    /// Centred, reflect-padded STFT of the clip: spectra `[frames][bins]` and the frame count.
+    fn stft_clip(&self, fft: &mut Fft, audio: &[f32]) -> (Vec<Complex32>, usize) {
         let (n, hop, bins) = (self.cfg.n_fft, self.cfg.hop, self.cfg.bins());
         let len = audio.len();
         let pad = n / 2;
@@ -653,8 +686,20 @@ impl Network {
         for t in 0..frames {
             fft.forward(&padded[t * hop..t * hop + n], &self.window, &mut spec[t * bins..(t + 1) * bins]);
         }
-        let mut raw = vec![0f32; frames * bins * 4];
-        self.run(pool, s, &spec, frames, None, &mut raw);
+        (spec, frames)
+    }
+
+    /// Correction, iSTFT and residual add of a clip's spectra `[frames][bins]` and decoder output `raw`.
+    fn synthesize_clip(
+        &self,
+        fft: &mut Fft,
+        audio: &[f32],
+        spec: &[Complex32],
+        raw: &[f32],
+        frames: usize,
+    ) -> Vec<f32> {
+        let (n, hop, bins, len) = (self.cfg.n_fft, self.cfg.hop, self.cfg.bins(), audio.len());
+        let pad = n / 2;
         let la = if self.cfg.causal { self.lookahead } else { 0 };
         let total = n + hop * (frames - 1);
         let (mut y, mut env) = (vec![0f32; total], vec![0f32; total]);
@@ -676,6 +721,16 @@ impl Network {
             })
             .collect()
     }
+}
+
+/// Intermediate tensors of a whole-clip pass. `stages[0]` is the encoder output, then one entry per block, each
+/// `[band][frame][width]`; `spec` is `[frame][bin]`, `raw` `[frame][bin][4]`.
+pub struct Trace {
+    pub frames: usize,
+    pub spec: Vec<Complex32>,
+    pub stages: Vec<Vec<f32>>,
+    pub raw: Vec<f32>,
+    pub out: Vec<f32>,
 }
 
 /// Real FFTs of the analysis window.

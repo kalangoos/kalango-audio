@@ -13,6 +13,7 @@
 mod kernels;
 pub mod metrics;
 mod network;
+pub use network::Trace;
 mod pool;
 mod realtime;
 mod weights;
@@ -106,6 +107,13 @@ impl Offline {
         }
         let scratch = &mut self.scratch.as_mut().unwrap().1;
         self.net.forward_clip(&self.pool, scratch, &mut self.fft, audio)
+    }
+
+    /// One whole-clip pass (no chunking) keeping the intermediate tensors; for comparing with a reference.
+    pub fn trace(&mut self, audio: &[f32]) -> network::Trace {
+        let frames = 1 + audio.len() / self.net.cfg.hop;
+        let mut scratch = network::Scratch::new(&self.net, frames, self.pool.threads(), 0);
+        self.net.trace_clip(&self.pool, &mut scratch, &mut self.fft, audio)
     }
 
     /// Isolates the voice of mono 48 kHz `audio` of any length.
