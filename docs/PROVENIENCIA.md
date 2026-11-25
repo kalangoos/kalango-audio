@@ -72,6 +72,12 @@ grep -rniE "$PADRAO" .
 - Fora da lista, só em alternativas OR (escolhemos a permissiva): `ryu-js` (Apache-2.0 OR BSL-1.0),
   `r-efi` (MIT OR Apache-2.0 OR LGPL-2.1-or-later), `anymap3` (BlueOak-1.0.0 OR MIT OR Apache-2.0).
 - Os ícones de linha (`assets/ui/`) e os tokens de cor (`assets/css/tokens-*.css`) são do KalangoOS.
+- Isolar voz (`crates/kalango-isolar-voz`): porte em Rust do **Inworld Voice Isolator** v1
+  (<https://github.com/inworld-ai/voice-isolator>, <https://huggingface.co/inworld/voice-isolator>). Código **e pesos**
+  são **Apache-2.0** (README e MODEL_CARD do projeto; `NOTICE`: Copyright 2026 Inworld AI). Os pesos foram treinados
+  também com VocalSet (CC BY 4.0), IndicVoices-R (CC BY 4.0) e VCTK (ODC-By 1.0), citados no `NOTICE` deles. Os pesos
+  **não** entram no git: ficam em `~/.cache/kalango-isolar-voz/weights` (SHA-256 em `src/lib.rs`, conferidos).
+  Os testes só usam sinais sintéticos e a referência gerada localmente com o PyTorch deles.
 - `nnnoiseless` (BSD-3-Clause) é uma reescrita do RNNoise; os pesos do modelo vêm do projeto RNNoise (BSD).
 
 ## O que esta auditoria não resolve

@@ -78,4 +78,5 @@ em **Ajuda › Ajuda de scripts** dentro do app.
 
 - [`docs/COMPORTAMENTO.md`](docs/COMPORTAMENTO.md) — como o Kalango Audio se comporta (blocos, medidores, gravação).
 - [`docs/PROVENIENCIA.md`](docs/PROVENIENCIA.md) — auditoria de origem: o que foi verificado e trocado.
+- [`docs/ISOLAR-VOZ.md`](docs/ISOLAR-VOZ.md) — porte em Rust do isolador de voz: paridade e velocidade medidas.
 - Design: página "26 · Kalango Audio" do Design System do KalangoOS (FigCraft).
