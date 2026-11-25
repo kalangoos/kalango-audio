@@ -1,0 +1,12 @@
+[package]
+name = "kalango-isolar-voz"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+description = "Isolar voz: o Inworld Voice Isolator (pesos Apache-2.0) em Rust puro, em tempo real e em arquivos"
+publish = false
+
+[dependencies]
+memmap2 = "0.9.10"
+realfft = "3.5.1"
+serde_json = "1.0.154"
