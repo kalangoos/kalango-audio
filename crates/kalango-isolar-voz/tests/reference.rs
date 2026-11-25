@@ -14,9 +14,9 @@ use kalango_isolar_voz::{Offline, Realtime, RealtimeOptions, OFFLINE_FILE, REALT
 const CLIPS: [&str; 4] = ["pink_0db_3s", "music_5db_3s", "babble_10db_3s", "pink_5db_12s"];
 
 fn base() -> PathBuf {
-    std::env::var_os("KALANGO_ISOLAR_VOZ_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".cache/kalango-isolar-voz"))
+    std::env::var_os("KALANGO_ISOLAR_VOZ_DIR").map(PathBuf::from).unwrap_or_else(|| {
+        PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".cache/kalango-isolar-voz")
+    })
 }
 
 fn available(file: &str) -> Option<PathBuf> {
@@ -92,7 +92,7 @@ fn push_frame_is_the_stream_delayed() {
     assert_eq!(delay, 2944);
     let mut out = vec![0f32; 960];
     let mut got = Vec::new();
-    for piece in input.chunks_exact(960) {
+    for piece in input.as_chunks::<960>().0 {
         rt.push_frame(piece, &mut out);
         got.extend_from_slice(&out);
     }

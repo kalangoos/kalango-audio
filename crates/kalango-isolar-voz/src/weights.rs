@@ -127,10 +127,10 @@ impl Config {
             attention_window: int("attention_window_frames", Some(0))?,
             blocks,
         };
-        if config.width % (2 * config.num_heads) != 0 || (config.width / config.num_heads) % 2 != 0 {
+        if !config.width.is_multiple_of(2 * config.num_heads) || !(config.width / config.num_heads).is_multiple_of(2) {
             return Err(bad("width/num_heads"));
         }
-        if config.n_fft % 2 != 0 || config.hop == 0 || config.hop > config.n_fft / 2 {
+        if !config.n_fft.is_multiple_of(2) || config.hop == 0 || config.hop > config.n_fft / 2 {
             return Err(bad("n_fft/hop_length"));
         }
         Ok(config)
@@ -182,7 +182,6 @@ pub struct Checkpoint {
     data_start: usize,
     tensors: HashMap<String, (Vec<usize>, usize, usize)>,
     pub config: Config,
-    pub num_params: usize,
 }
 
 impl Checkpoint {
@@ -207,7 +206,6 @@ impl Checkpoint {
         let config: Value = serde_json::from_str(config).map_err(|_| fail("config JSON"))?;
         let config = Config::from_json(&config)?;
         let mut tensors = HashMap::new();
-        let mut num_params = 0;
         let data_len = map.len() - data_start;
         for (name, info) in header {
             if name == "__metadata__" {
@@ -226,27 +224,28 @@ impl Checkpoint {
                 .ok_or_else(|| fail(name))?;
             let offsets = info.get("data_offsets").and_then(Value::as_array).ok_or_else(|| fail(name))?;
             let (start, end) = match offsets.as_slice() {
-                [a, b] => (a.as_u64().ok_or_else(|| fail(name))? as usize, b.as_u64().ok_or_else(|| fail(name))? as usize),
+                [a, b] => {
+                    (a.as_u64().ok_or_else(|| fail(name))? as usize, b.as_u64().ok_or_else(|| fail(name))? as usize)
+                }
                 _ => return Err(fail(name)),
             };
             let count: usize = shape.iter().product();
             if end < start || end > data_len || end - start != 4 * count || start % 4 != 0 {
                 return Err(fail(&format!("{name}: deslocamentos inválidos")));
             }
-            num_params += count;
             tensors.insert(name.clone(), (shape, start, end));
         }
-        let store = if (map.as_ptr() as usize + data_start) % 4 == 0 && cfg!(target_endian = "little") {
+        let store = if (map.as_ptr() as usize + data_start).is_multiple_of(4) && cfg!(target_endian = "little") {
             Store::Mapped(map)
         } else {
             let mut owned = vec![0f32; data_len / 4];
-            for (dst, src) in owned.iter_mut().zip(map[data_start..].chunks_exact(4)) {
-                *dst = f32::from_le_bytes(src.try_into().unwrap());
+            for (dst, src) in owned.iter_mut().zip(map[data_start..].as_chunks::<4>().0) {
+                *dst = f32::from_le_bytes(*src);
             }
             Store::Owned(owned)
         };
         let data_start = if matches!(store, Store::Owned(_)) { 0 } else { data_start };
-        Ok(Checkpoint { store, data_start, tensors, config, num_params })
+        Ok(Checkpoint { store, data_start, tensors, config })
     }
 
     /// The tensor `name`, which must have `shape`.
@@ -261,10 +260,6 @@ impl Checkpoint {
             Store::Owned(v) => unsafe { v.as_ptr().add(start / 4) },
         };
         Ok(Tensor { ptr: base, len: (end - start) / 4 })
-    }
-
-    pub fn has(&self, name: &str) -> bool {
-        self.tensors.contains_key(name)
     }
 }
 

@@ -27,9 +27,9 @@ fn percentile(sorted: &[f64], p: f64) -> f64 {
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let base = std::env::var_os("KALANGO_ISOLAR_VOZ_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".cache/kalango-isolar-voz"));
+    let base = std::env::var_os("KALANGO_ISOLAR_VOZ_DIR").map(PathBuf::from).unwrap_or_else(|| {
+        PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".cache/kalango-isolar-voz")
+    });
     let mode = args.first().map(String::as_str).unwrap_or("realtime");
     let threads: usize = args.get(1).and_then(|v| v.parse().ok()).unwrap_or(1);
     let clip = read_f32(&base.join("ref/pink_5db_12s.in.f32")).expect("clip de referência");
@@ -46,7 +46,7 @@ fn main() {
             let mut out = vec![0f32; 960];
             let mut times = Vec::with_capacity(input.len() / 960);
             let start = Instant::now();
-            for piece in input.chunks_exact(960) {
+            for piece in input.as_chunks::<960>().0 {
                 let t = Instant::now();
                 rt.push_frame(piece, &mut out);
                 times.push(t.elapsed().as_secs_f64() * 1000.0);

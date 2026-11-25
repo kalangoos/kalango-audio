@@ -76,7 +76,14 @@ impl Offline {
         let rate = cfg.sample_rate as f64;
         let chunk = (cfg.chunk_seconds * rate) as usize;
         let overlap = ((cfg.overlap_seconds * rate) as usize).min(chunk / 2);
-        Ok(Offline { pool: pool::Pool::new(threads), scratch: None, fft: network::Fft::new(cfg.n_fft), chunk, overlap, net })
+        Ok(Offline {
+            pool: pool::Pool::new(threads),
+            scratch: None,
+            fft: network::Fft::new(cfg.n_fft),
+            chunk,
+            overlap,
+            net,
+        })
     }
 
     /// Parameters of the opened checkpoint.

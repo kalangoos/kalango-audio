@@ -102,7 +102,7 @@ mod avx2 {
     }
 
     #[inline(always)]
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments, clippy::needless_range_loop)]
     unsafe fn tile<const MR: usize, const NR: usize>(
         x: *const f32,
         ldx: usize,
@@ -119,13 +119,13 @@ mod avx2 {
         let mut p = 0;
         while p < k8 {
             let mut wv = [_mm256_setzero_ps(); NR];
-            for j in 0..NR {
-                wv[j] = _mm256_loadu_ps(w.add(j * ldw + p));
+            for (j, wj) in wv.iter_mut().enumerate() {
+                *wj = _mm256_loadu_ps(w.add(j * ldw + p));
             }
-            for i in 0..MR {
+            for (i, row) in acc.iter_mut().enumerate() {
                 let xv = _mm256_loadu_ps(x.add(i * ldx + p));
-                for j in 0..NR {
-                    acc[i][j] = _mm256_fmadd_ps(xv, wv[j], acc[i][j]);
+                for (a, wj) in row.iter_mut().zip(&wv) {
+                    *a = _mm256_fmadd_ps(xv, *wj, *a);
                 }
             }
             p += 8;
@@ -213,6 +213,7 @@ mod avx2 {
 
 /// e^x to ~2 ulp (Cephes' polynomial), written so loops over it vectorise.
 #[inline(always)]
+#[allow(clippy::excessive_precision)]
 pub fn exp(x: f32) -> f32 {
     let x = x.clamp(-87.33654, 88.37626);
     let fx = (x * std::f32::consts::LOG2_E + 0.5).floor();

@@ -275,7 +275,11 @@ impl Network {
                 xz: (xz as *const f32).wrapping_add(seq * len * 2 * inner),
                 w: layer.conv_w.as_ptr(),
                 b: layer.conv_b.as_ptr(),
-                tail: if tail.ptr().is_null() { tail.ptr() } else { tail.ptr().wrapping_add(seq * (MAMBA_CONV - 1) * inner) },
+                tail: if tail.ptr().is_null() {
+                    tail.ptr()
+                } else {
+                    tail.ptr().wrapping_add(seq * (MAMBA_CONV - 1) * inner)
+                },
                 out: u.ptr().wrapping_add(seq * len * inner),
             });
         });
@@ -587,7 +591,8 @@ impl Network {
             let start = self.edges[band].0;
             let buf = unsafe { pt.slice(thread * ptl, 2 * frames * w) };
             let (t1, t2) = buf.split_at_mut(frames * w);
-            for (dst, src) in t1.chunks_exact_mut(w).zip(x[band * frames * w..(band + 1) * frames * w].chunks_exact(w)) {
+            for (dst, src) in t1.chunks_exact_mut(w).zip(x[band * frames * w..(band + 1) * frames * w].chunks_exact(w))
+            {
                 for i in 0..w {
                     dst[i] = src[i] * self.dec_scale[i] + self.dec_shift[i];
                 }
@@ -604,7 +609,7 @@ impl Network {
     /// The complex change of frame `spec` that the decoder output `raw` `[bins][4]` encodes.
     pub fn correct(&self, raw: &[f32], spec: &[Complex32], out: &mut [Complex32]) {
         let bound = self.cfg.correction_bound;
-        for ((r, s), o) in raw.chunks_exact(4).zip(spec).zip(out.iter_mut()) {
+        for ((r, s), o) in raw.as_chunks::<4>().0.iter().zip(spec).zip(out.iter_mut()) {
             let m = Complex32::new(2.0 * r[0].tanh(), 2.0 * r[1].tanh());
             let (c0, c1) = (r[2].tanh(), r[3].tanh());
             let norm = (c0 * c0 + c1 * c1).sqrt().max(1.0);

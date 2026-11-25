@@ -24,5 +24,5 @@ pub fn max_abs_diff(a: &[f32], b: &[f32]) -> f32 {
 /// Reads a raw little-endian float32 file.
 pub fn read_f32(path: &std::path::Path) -> std::io::Result<Vec<f32>> {
     let bytes = std::fs::read(path)?;
-    Ok(bytes.chunks_exact(4).map(|b| f32::from_le_bytes(b.try_into().unwrap())).collect())
+    Ok(bytes.as_chunks::<4>().0.iter().map(|b| f32::from_le_bytes(*b)).collect())
 }

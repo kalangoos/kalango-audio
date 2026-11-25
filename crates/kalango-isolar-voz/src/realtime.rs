@@ -181,7 +181,7 @@ impl Realtime {
             self.fifo_frame = input.len();
             let delay = self.frame_latency(input.len());
             self.fifo = VecDeque::with_capacity(delay + 4 * input.len() + 2 * self.n);
-            self.fifo.extend(std::iter::repeat(0.0).take(delay));
+            self.fifo.extend(std::iter::repeat_n(0.0, delay));
         }
         let mut out = std::mem::take(&mut self.out);
         out.clear();
@@ -244,7 +244,11 @@ impl Realtime {
         let total = (self.audio_base + self.audio.len()) as isize;
         for (i, s) in self.segment.iter_mut().enumerate() {
             let at = start + i as isize;
-            *s = if at >= self.audio_base as isize && at < total { self.audio[at as usize - self.audio_base] } else { 0.0 };
+            *s = if at >= self.audio_base as isize && at < total {
+                self.audio[at as usize - self.audio_base]
+            } else {
+                0.0
+            };
         }
         let bins = self.bins;
         let window = &self.net.window;
@@ -257,7 +261,11 @@ impl Realtime {
         let source = if index <= last { (index + self.lookahead).min(last) } else { index };
         let bins = self.bins;
         let (rs, ss) = (source % self.ring, index % self.ring);
-        self.net.correct(&self.raw_ring[rs * bins * 4..(rs + 1) * bins * 4], &self.spec_ring[ss * bins..(ss + 1) * bins], &mut self.corrected);
+        self.net.correct(
+            &self.raw_ring[rs * bins * 4..(rs + 1) * bins * 4],
+            &self.spec_ring[ss * bins..(ss + 1) * bins],
+            &mut self.corrected,
+        );
         self.fft.inverse(&self.corrected, &self.net.window, &mut self.frame);
         let start = index * self.hop - self.ola_base;
         assert!(start + self.n <= self.ola.len(), "buffer de síntese pequeno demais");

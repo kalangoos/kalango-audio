@@ -44,11 +44,25 @@ impl Linear {
     fn apply_st(&self, x: &[f32], ldx: usize, m: usize, out: &mut [f32], ldo: usize, add: bool) {
         assert!(m == 0 || (x.len() >= (m - 1) * ldx + self.k && out.len() >= (m - 1) * ldo + self.n));
         unsafe {
-            matmul_nt(x.as_ptr(), ldx, m, self.k, self.w.as_ptr(), self.k, 0, self.n, self.b.as_deref(), out.as_mut_ptr(), ldo, add)
+            matmul_nt(
+                x.as_ptr(),
+                ldx,
+                m,
+                self.k,
+                self.w.as_ptr(),
+                self.k,
+                0,
+                self.n,
+                self.b.as_deref(),
+                out.as_mut_ptr(),
+                ldo,
+                add,
+            )
         }
     }
 
     /// As [`apply_st`], split over the pool: by rows for many rows, by outputs for a stream's few.
+    #[allow(clippy::too_many_arguments)]
     fn apply(&self, pool: &Pool, x: &[f32], ldx: usize, m: usize, out: &mut [f32], ldo: usize, add: bool) {
         let threads = pool.threads();
         if threads == 1 || m * self.n * self.k < (1 << 19) {
@@ -62,7 +76,22 @@ impl Linear {
             pool.run(m.div_ceil(rows), |task, _| {
                 let r0 = task * rows;
                 let r1 = (r0 + rows).min(m);
-                unsafe { matmul_nt(xp.ptr().add(r0 * ldx), ldx, r1 - r0, k, w as *const f32, k, 0, n, b, op.ptr().add(r0 * ldo), ldo, add) }
+                unsafe {
+                    matmul_nt(
+                        xp.ptr().add(r0 * ldx),
+                        ldx,
+                        r1 - r0,
+                        k,
+                        w as *const f32,
+                        k,
+                        0,
+                        n,
+                        b,
+                        op.ptr().add(r0 * ldo),
+                        ldo,
+                        add,
+                    )
+                }
             });
         } else {
             let chunk = (n.div_ceil(threads * 2).div_ceil(3) * 3).max(12);
@@ -143,6 +172,7 @@ struct BiMamba {
     norm: Norm,
 }
 
+#[allow(clippy::large_enum_variant)]
 enum Block {
     Attention { time: TimeAttention, band: BandAttention },
     Mamba { time: BiMamba, freq: BiMamba },
@@ -203,8 +233,18 @@ fn load_bimamba(ck: &Checkpoint, p: &str, width: usize, causal: bool) -> Result<
     let dt_rank = width.div_ceil(16);
     Ok(BiMamba {
         forward: load_mamba(ck, &format!("{p}.forward_blocks"), width, inner, dt_rank)?,
-        backward: if causal { None } else { Some(load_mamba(ck, &format!("{p}.backward_blocks"), width, inner, dt_rank)?) },
-        output_proj: Linear::load(ck, &format!("{p}.output_proj"), width, if causal { width } else { 2 * width }, true)?,
+        backward: if causal {
+            None
+        } else {
+            Some(load_mamba(ck, &format!("{p}.backward_blocks"), width, inner, dt_rank)?)
+        },
+        output_proj: Linear::load(
+            ck,
+            &format!("{p}.output_proj"),
+            width,
+            if causal { width } else { 2 * width },
+            true,
+        )?,
         norm: Norm::load(ck, &format!("{p}.norm"), width)?,
     })
 }
@@ -230,7 +270,10 @@ impl Network {
             let frames = lookahead.unwrap_or(cfg.lookahead_frames);
             if !cfg.lookahead_choices.is_empty() {
                 let index = cfg.lookahead_choices.iter().position(|&c| c == frames).ok_or_else(|| {
-                    Error::Format(format!("look-ahead de {frames} quadros não é um dos treinados: {:?}", cfg.lookahead_choices))
+                    Error::Format(format!(
+                        "look-ahead de {frames} quadros não é um dos treinados: {:?}",
+                        cfg.lookahead_choices
+                    ))
                 })?;
                 let table = ck.get("lookahead_embedding.weight", &[cfg.lookahead_choices.len(), w])?;
                 for band in band_add.chunks_exact_mut(w) {
@@ -298,7 +341,8 @@ impl Network {
         let cb = ck.get("denoise_decoder.condition.bias", &[2 * w])?;
         let cond: Vec<f32> = (0..2 * w).map(|i| cw[2 * i] + cb[i]).collect();
         let n = cfg.n_fft;
-        let window = (0..n).map(|i| (0.5 - 0.5 * (2.0 * std::f64::consts::PI * i as f64 / n as f64).cos()) as f32).collect();
+        let window =
+            (0..n).map(|i| (0.5 - 0.5 * (2.0 * std::f64::consts::PI * i as f64 / n as f64).cos()) as f32).collect();
         let half = w / cfg.num_heads / 2;
         let inv_freq = (0..half).map(|i| 10000f32.powf(-(i as f32) / half as f32)).collect();
         Ok(Network {
@@ -337,7 +381,6 @@ impl Network {
 
 /// Reusable buffers for one network run of up to `rows` tokens per group.
 pub struct Scratch {
-    rows: usize,
     a: Vec<f32>,
     qkv: Vec<f32>,
     o: Vec<f32>,
@@ -373,7 +416,6 @@ impl Scratch {
         let maxw = net.edges.iter().map(|(s, e)| e - s).max().unwrap_or(1);
         let per_thread_len = attention.max(frames * 2 * maxw + 2 * frames * w).max(frames * (2 * w + 4 * maxw));
         Scratch {
-            rows,
             a: vec![0.0; rows * w],
             qkv: vec![0.0; rows * 3 * w],
             o: vec![0.0; rows * w],
@@ -415,15 +457,8 @@ impl StreamState {
         let bands = net.bands();
         let capacity = cache_frames + max_block;
         let inner = 2 * w;
-        let mut s = StreamState {
-            keys: vec![],
-            values: vec![],
-            tails: vec![],
-            states: vec![],
-            capacity,
-            cache_frames,
-            pos: 0,
-        };
+        let mut s =
+            StreamState { keys: vec![], values: vec![], tails: vec![], states: vec![], capacity, cache_frames, pos: 0 };
         for block in &net.blocks {
             match block {
                 Block::Attention { .. } => {
@@ -442,11 +477,6 @@ impl StreamState {
     pub fn bytes(&self) -> usize {
         4 * (self.keys.iter().chain(&self.values).chain(&self.tails).chain(&self.states).map(Vec::len).sum::<usize>())
     }
-}
-
-enum Mode<'a> {
-    Clip,
-    Stream(&'a mut StreamState),
 }
 
 struct ScanArgs {
@@ -488,7 +518,8 @@ fn scan_body(a: &ScanArgs) {
                 let bc = std::slice::from_raw_parts(a.dbc.add(r * a.dbc_ld + a.dt_rank), 2 * MAMBA_STATE);
                 let dl: [f32; 8] = std::slice::from_raw_parts(a.delta.add(r * inner + c), 8).try_into().unwrap();
                 let ul: [f32; 8] = std::slice::from_raw_parts(a.u.add(r * inner + c), 8).try_into().unwrap();
-                let zl: [f32; 8] = std::slice::from_raw_parts(a.xz.add(r * 2 * inner + inner + c), 8).try_into().unwrap();
+                let zl: [f32; 8] =
+                    std::slice::from_raw_parts(a.xz.add(r * 2 * inner + inner + c), 8).try_into().unwrap();
                 let mut du = [0f32; 8];
                 for l in 0..8 {
                     du[l] = dl[l] * ul[l];
@@ -594,4 +625,3 @@ fn softplus_body(x: &mut [f32]) {
 dispatch! {
     fn softplus(x: &mut [f32]) => softplus_body
 }
-
