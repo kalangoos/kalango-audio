@@ -3,6 +3,14 @@
   <id>os.kalango.Audio</id>
   <name>Kalango Audio</name>
   <summary>Capture, trate, roteie e grave o som de apps e microfones</summary>
+  <summary xml:lang="en">Capture, process, route and record the sound of apps and microphones</summary>
+  <summary xml:lang="de">Ton von Apps und Mikrofonen aufnehmen, bearbeiten, weiterleiten und aufzeichnen</summary>
+  <summary xml:lang="es">Captura, procesa, enruta y graba el sonido de apps y micrófonos</summary>
+  <summary xml:lang="fr">Capturez, traitez, routez et enregistrez le son des applications et des micros</summary>
+  <summary xml:lang="it">Cattura, elabora, instrada e registra l'audio di app e microfoni</summary>
+  <summary xml:lang="ja">アプリやマイクの音をキャプチャ、加工、ルーティング、録音します</summary>
+  <summary xml:lang="ru">Захват, обработка, маршрутизация и запись звука приложений и микрофонов</summary>
+  <summary xml:lang="zh_CN">采集、处理、路由和录制应用与麦克风的声音</summary>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
   <launchable type="desktop-id">os.kalango.Audio.desktop</launchable>
@@ -10,5 +18,13 @@
   <description>
     <p>Monte sessões com blocos (fontes, efeitos e saídas), ouça o resultado ao vivo, grave em arquivo,
     transmita e transcreva — tudo no seu computador. Parte do KalangoOS.</p>
+    <p xml:lang="en">Build sessions from blocks (sources, effects and outputs), hear the result live, record to a file, stream and transcribe — all on your computer. Part of KalangoOS.</p>
+    <p xml:lang="de">Stellen Sie Sitzungen aus Blöcken zusammen (Quellen, Effekte und Ausgänge), hören Sie das Ergebnis live, nehmen Sie in eine Datei auf, streamen und transkribieren Sie – alles auf Ihrem Computer. Teil von KalangoOS.</p>
+    <p xml:lang="es">Monta sesiones con bloques (fuentes, efectos y salidas), escucha el resultado en directo, graba en un archivo, transmite y transcribe, todo en tu ordenador. Parte de KalangoOS.</p>
+    <p xml:lang="fr">Composez des sessions à partir de blocs (sources, effets et sorties), écoutez le résultat en direct, enregistrez dans un fichier, diffusez et transcrivez, le tout sur votre ordinateur. Fait partie de KalangoOS.</p>
+    <p xml:lang="it">Crea sessioni con blocchi (sorgenti, effetti e uscite), ascolta il risultato dal vivo, registra su file, trasmetti e trascrivi, tutto sul tuo computer. Parte di KalangoOS.</p>
+    <p xml:lang="ja">ブロック（入力、エフェクト、出力）でセッションを組み立て、結果をその場で聴き、ファイルに録音し、配信や文字起こしもできます。すべてコンピューター上で動きます。KalangoOSの一部です。</p>
+    <p xml:lang="ru">Собирайте сеансы из блоков (источники, эффекты и выходы), слушайте результат вживую, записывайте в файл, транслируйте и расшифровывайте — всё на вашем компьютере. Часть KalangoOS.</p>
+    <p xml:lang="zh_CN">用积木（音源、效果和输出）搭建会话，实时收听结果，录制到文件，推流和转写——全部在你的电脑上完成。KalangoOS 的一部分。</p>
   </description>
 </component>

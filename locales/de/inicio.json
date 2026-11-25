@@ -1,0 +1,22 @@
+{
+ "Active · not recording": "Aktiv · keine Aufnahme",
+ "Does not record · only routes the sound": "Nimmt nicht auf · leitet nur den Ton weiter",
+ "Drag blocks or start from a template": "Ziehen Sie Blöcke hierher oder beginnen Sie mit einer Vorlage",
+ "Last recording": "Letzte Aufnahme",
+ "Not now": "Nicht jetzt",
+ "Nothing recorded yet": "Noch nichts aufgenommen",
+ "Recording · {time}": "Aufnahme läuft · {time}",
+ "Routing": "Routing",
+ "Scheduled · {when}": "Geplant · {when}",
+ "See all": "Alle anzeigen",
+ "See the plan": "Plan ansehen",
+ "Sound playing in {app}": "Ton wird in {app} abgespielt",
+ "Start with a template": "Mit einer Vorlage beginnen",
+ "Stopped": "Gestoppt",
+ "The agent can record the tab’s sound and your microphone and transcribe at the end. Nothing starts without your approval.": "Der Agent kann den Ton des Tabs und Ihr Mikrofon aufnehmen und am Ende transkribieren. Ohne Ihre Genehmigung startet nichts.",
+ "Your sessions": "Ihre Sitzungen",
+ "record the meeting in the browser and transcribe it": "das Meeting im Browser aufnehmen und transkribieren",
+ "with transcript": "mit Transkript",
+ "{n} sessions · {a} active now · {r} recording": "{n} Sitzungen · {a} gerade aktiv · {r} nehmen auf",
+ "“{name}” deleted": "„{name}“ gelöscht"
+}
