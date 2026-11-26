@@ -10,7 +10,7 @@ mod process;
 
 use std::fmt;
 use std::io::{self, BufReader, Write};
-use std::net::{Ipv4Addr, SocketAddr, TcpStream};
+use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::thread::JoinHandle;
@@ -85,6 +85,8 @@ pub struct Config {
     pub lookahead_frames: Option<u32>,
     /// Directory for the generated configuration and the server log (created if missing).
     pub work_dir: PathBuf,
+    /// Fixed port instead of a free one picked at spawn (a lost bind race is then an error, not retried).
+    pub port: Option<u16>,
     /// Extra environment for the child (the rest is cleared), e.g. `LD_LIBRARY_PATH` for a private CUDA runtime.
     pub env: Vec<(String, String)>,
     /// How long `Server::spawn` waits for `/health`.
@@ -108,6 +110,7 @@ impl Config {
             threads: 1,
             lookahead_frames: None,
             work_dir,
+            port: None,
             env: Vec::new(),
             startup_timeout: Duration::from_secs(60),
             io_timeout: Duration::from_secs(10),
@@ -153,27 +156,43 @@ pub struct Server {
 impl Server {
     /// Starts the server and waits until it listens and `/health` answers 200 (or the timeout / an early exit).
     ///
-    /// The server binds port 0 and the port is read back from the kernel as the child's own listening socket, so no
-    /// other process can be mistaken for it (see `ownership`). The work directory must be private (0700, ours).
+    /// The server refuses port 0, so a free port is chosen and handed over, which leaves a window in which another
+    /// process could take it. That is harmless because nothing is trusted by port number: the child's bind then fails
+    /// (it does not set SO_REUSEPORT) and it exits, and `/health` and audio are only used once the kernel says that
+    /// the LISTEN socket on that port is the child's own (see `ownership`). A lost race is retried with a new port
+    /// (automatic ports only). The work directory must be private (0700, ours).
     pub fn spawn(config: &Config) -> Result<Self> {
         ownership::private_dir(&config.work_dir)?;
-        let config_path = ownership::write_private(&config.work_dir, "audiocpp-server.json", &config.server_json(0))?;
+        let attempts = if config.port.is_some() { 1 } else { 3 };
+        let mut last = Error::Timeout("the server did not become healthy");
+        for _ in 0..attempts {
+            let port = match config.port {
+                Some(p) => p,
+                None => free_port()?,
+            };
+            match Self::spawn_on(config, port) {
+                Err(Error::ServerExited(code)) => last = Error::ServerExited(code),
+                other => return other,
+            }
+        }
+        Err(last)
+    }
+
+    fn spawn_on(config: &Config, port: u16) -> Result<Self> {
+        let config_path =
+            ownership::write_private(&config.work_dir, "audiocpp-server.json", &config.server_json(port))?;
         let log = config.work_dir.join("audiocpp-server.log");
         let args = vec!["--config".to_string(), config_path.to_string_lossy().into_owned()];
         let process = Process::spawn(&config.server_bin, &args, &config.env, &log)?;
-        let mut server =
-            Server { process, addr: SocketAddr::from((Ipv4Addr::LOCALHOST, 0)), io_timeout: config.io_timeout, log };
+        let server =
+            Server { process, addr: SocketAddr::from((Ipv4Addr::LOCALHOST, port)), io_timeout: config.io_timeout, log };
+        let mut server = server;
         let deadline = Instant::now() + config.startup_timeout;
         loop {
             if let Some(code) = server.process.try_wait()? {
                 return Err(Error::ServerExited(code));
             }
-            if server.addr.port() == 0 {
-                if let Ok(Some(port)) = ownership::listening_port_of(server.process.id()) {
-                    server.addr.set_port(port);
-                }
-            }
-            if server.addr.port() != 0 && server.health().is_ok() {
+            if server.verify_owner().is_ok() && server.health().is_ok() {
                 return Ok(server);
             }
             if Instant::now() >= deadline {
@@ -229,6 +248,11 @@ impl Server {
         self.verify_owner()?;
         Stream::open(self.addr, self.io_timeout)
     }
+}
+
+fn free_port() -> io::Result<u16> {
+    // Only a candidate: ownership of the port is proven later, never assumed.
+    Ok(TcpListener::bind((Ipv4Addr::LOCALHOST, 0))?.local_addr()?.port())
 }
 
 /// One live exchange: chunked PCM (f32 little endian, 48 kHz mono) goes in, 16-bit PCM comes back as `f32`.

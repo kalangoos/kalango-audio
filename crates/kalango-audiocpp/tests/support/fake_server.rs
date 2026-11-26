@@ -9,7 +9,12 @@ fn main() {
         std::thread::sleep(std::time::Duration::from_secs(60));
         return;
     }
-    let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+    // `--config <path>`: take the port from the generated JSON like the real server does
+    let path = std::env::args().nth(2).expect("config path");
+    let json = std::fs::read_to_string(path).expect("config");
+    let port: u16 =
+        json.split("\"port\":").nth(1).and_then(|r| r.split(',').next()).and_then(|v| v.parse().ok()).expect("port");
+    let listener = TcpListener::bind(("127.0.0.1", port)).expect("bind");
     for stream in listener.incoming() {
         let Ok(mut stream) = stream else { continue };
         // read the whole request head, or closing early would reset the connection
