@@ -147,6 +147,89 @@ Um servidor mantém o modelo carregado (cerca de 1 GiB de VRAM, 0,3 s para carre
 trava o modelo durante o pedido (`busy_timeout_ms`), ou seja, um fluxo por vez por id de modelo: **não testado aqui**.
 Para dois fluxos simultâneos, registrar dois ids ou subir dois servidores (a validar).
 
+## Integrado no Kalango Audio (bloco "Isolar voz")
+
+O audio.cpp é o backend do isolador de voz no app. O que existe, onde e como foi medido (mesma máquina, RTX 3090
+compartilhada, carga entre 9 e 15 durante estas medições):
+
+| Peça | Onde | O que faz |
+|---|---|---|
+| descoberta | `kalango-audiocpp::discovery` | programa em `KALANGO_AUDIOCPP_SERVER` ou `~/.local/share/kalango/audiocpp/bin/audiocpp_server`; modelo em `KALANGO_AUDIOCPP_MODEL` (arquivo ou pasta) ou `~/.local/share/kalango/modelos/voice-isolator`; backend por `KALANGO_AUDIOCPP_BACKEND` ou CUDA se há `/dev/nvidiactl`, senão CPU. Um valor de variável errado é apontado, não substituído. Nada é baixado. |
+| serviço | `kalango-audiocpp::service` | um `audiocpp_server` por app, lazy (primeiro uso), uma thread gerente dona do filho (o `PR_SET_PDEATHSIG` vale para a thread que criou o filho), parada após 120 s sem uso e no `shutdown`, reinício com espera 1, 2, 4, 8 s (teto 30 s), desiste após 5 falhas seguidas (`retry()` recomeça), lê o backend real em `/health`, mede 1 s de som ao subir (RTF) e só libera o modo ao vivo com placa de vídeo e RTF < 0,8 |
+| ao vivo | `kalango-audiocpp::live` | `LiveIsolator::process` roda na thread de áudio sem esperar: manda o mono em blocos de 20 ms a uma thread que fala com o servidor e mistura a voz isolada com o original por posição de amostra; o original é segurado pelo atraso do modelo; sem modelo pronto o original passa direto |
+| gravação | `kalango-audiocpp::offline` | manda a gravação inteira o mais rápido possível, mais 8192 amostras de silêncio para esvaziar a antecipação do modelo, e corta no tamanho da entrada |
+| app | `src/isolator.rs`, `src/dsp.rs`, `src/gui/editor_inspector.rs`, `src/gui/gravacoes.rs` | bloco "Isolar voz" (intensidade, estado, atraso, o que falta), ação "Isolar voz" em Gravações (`nome (voz isolada).wav`, 24 bits mono 48 kHz), `isolator::shutdown()` ao fechar |
+
+Verificado à mão com o app e o servidor reais: `kill -9` no app mata o servidor no mesmo instante (sem órfão) e a pasta de trabalho que sobra é apagada na partida seguinte (`Config::remove_stale_work_dirs`).
+
+O servidor é iniciado com `--config`, `--no-ui` e `--max-loaded-models 1`, `host` 127.0.0.1, sem `--ui-management` (sem
+gerenciador de modelos nem download), pasta de trabalho 0700 sob `XDG_RUNTIME_DIR`, ambiente do filho limpo.
+
+### Medido pelo serviço, com o binário e os pesos reais (`tests/real_service.rs`, clipe `pink_5db_12s`)
+
+| Item | Resultado |
+|---|---|
+| pronto depois do primeiro uso | cerca de 1,0 s (carga do modelo + 1 s de som de teste de velocidade) |
+| velocidade medida ao subir (RTF) | 0,19 a 0,49 (inclui o aquecimento do primeiro trecho; limite do modo ao vivo 0,8) |
+| memória do servidor | 302 MiB de RAM (processo), só a família `voice_isolator` carregada |
+| gravação (offline pelo serviço), 12 s | RTF 0,124 a 0,26 (1,5 a 3,1 s); SI-SDR 74,4 dB contra a referência armazenada no corpo do clipe; 30,6 dB nas últimas 8192 amostras (fim do fluxo: a referência foi gerada sem o silêncio extra); 44,6 dB no clipe todo |
+| ao vivo pelo app (`LiveIsolator`, blocos de 10 ms em tempo real) | atraso fixo de 151,3 ms (p50 = p99) numa execução limpa, 72,4 dB de SI-SDR contra a referência nos últimos 4 s, 0 a 1 "resposta atrasada" |
+
+Leituras honestas:
+
+- O atraso ponta a ponta pelo app (cerca de 150 ms) é maior que os 83 a 103 ms do servidor sozinho: somam-se o lote de
+  20 ms antes do envio, a espera de 20 ms que dá margem ao jitter (`PRIME` em `live.rs`), o tique de 10 ms do motor e o
+  trecho de 40 ms em que o servidor entrega.
+- Quando uma resposta do servidor chega tarde (GPU dividida com outros programas), o som daquele instante some por um
+  momento e o atraso aumenta pelo tamanho da falha, de forma permanente até o bloco reiniciar; medi 4 a 9 falhas e
+  atrasos de 151 a 231 ms com a máquina em carga 15, contra 0 a 1 falha em carga baixa. Passando de 0,6 s de som
+  esperando o modelo, o bloco desiste e deixa o original passar (e tenta de novo).
+- O modo "gravação" usa o checkpoint realtime pela rota ao vivo (RTF 0,13 a 0,26 nestas medições, 0,068 só foi medido
+  com o `audiocpp_cli` e o checkpoint offline). Usar o checkpoint offline exigiria registrar um segundo modelo no
+  servidor e uma rota que o wrapper ainda não fala: fica como melhoria.
+
+### Testes
+
+- `crates/kalango-audiocpp/tests/service.rs` (17 testes, com o servidor falso de `tests/support/fake_server.rs`, que
+  entende `/health` e `/v1/audio/speech/live`): início lazy, parada por ociosidade e nova partida, `shutdown` sem processo
+  nem pasta restantes, o filho morre se o `Service` é solto, backend lido do `/health`, teste de velocidade, servidor que
+  morre e volta com espera, desistência e `retry`, servidor que sai logo, gravação com alinhamento amostra a amostra e
+  cancelamento, mistura ao vivo alinhada sem eco (ganho 0,5, atraso do modelo, intensidade 1, 0,5 e 0), original
+  inalterado enquanto o modelo não está pronto, "só gravação" em servidor só CPU, queda por lentidão, queda do servidor
+  no meio do som e volta, soltar o bloco deixa o servidor parar.
+- `src/isolator.rs` e `src/dsp.rs` (com o mesmo servidor falso): bloco sem arquivos deixa o original passar e diz o que
+  falta; com servidor, a saída é o som isolado com o atraso informado; a ação sobre gravação grava ao lado sem
+  sobrescrever, respeita a intensidade e cancela.
+- `tests/real_service.rs` (`#[ignore]`, binário e pesos reais; `KALANGO_AUDIOCPP_REF_DIR` aponta para a pasta do clipe de
+  referência): isola `pink_5db_12s` offline e ao vivo e exige SI-SDR acima de 60 dB no corpo (offline) e 30 dB nos últimos
+  4 s (ao vivo, em até três tentativas por causa da GPU compartilhada).
+
+```bash
+KALANGO_AUDIOCPP_SERVER=$A/build-cuda/bin/audiocpp_server \
+KALANGO_AUDIOCPP_MODEL=$A/models/voice-isolator/denoiser_realtime.safetensors \
+  cargo test -p kalango-audiocpp --test real_service -- --ignored --nocapture
+```
+
+Capturas do bloco no app (tema escuro, pt_BR): `capturas/isolar-voz-sem-modelo.jpg` (o que falta e onde colocar),
+`capturas/isolar-voz-pronto.jpg` (instalado, sessão parada) e `capturas/isolar-voz-rodando.jpg` (sessão rodando com o
+servidor real: "Isolando a voz", atraso de 150 ms, placa de vídeo CUDA).
+
+### Empacotamento (proposta, nada foi adicionado a ISO nem pacote)
+
+O `audiocpp_server` com CUDA tem 320 a 385 MB (runtime CUDA estático) e os pesos 0,5 GB: não entram na ISO. Opções:
+
+1. **Download opcional na Central de Apps**, com tela de consentimento (licença Apache-2.0 do audio.cpp e dos pesos
+   Inworld, créditos de `PROVENIENCIA.md`, tamanho, destino), que grava o programa em
+   `~/.local/share/kalango/audiocpp/bin/` e os pesos em `~/.local/share/kalango/modelos/voice-isolator/` (é onde o app já
+   procura), conferindo SHA-256. É o caminho recomendado: o app não muda, só passa a achar os arquivos.
+2. **Compilação Vulkan** (sem CUDA, algumas dezenas de MB), a mesma receita com `--backend vulkan`; funciona em placas
+   AMD, Intel e NVIDIA. Precisa de `glslc`/Vulkan SDK na máquina de build e **não foi construída nem testada**; o app já
+   aceita `KALANGO_AUDIOCPP_BACKEND=vulkan`, mas a velocidade ao vivo é desconhecida.
+3. **Compilação só CPU**, pequena, serve à ação sobre gravação (RTF cerca de 3 a 6: um minuto de som leva de 3 a 6
+   minutos) e o bloco ao vivo fica desligado, como já acontece quando o servidor informa CPU.
+
+Em qualquer opção a ISO continua sem o programa e sem os pesos; o bloco mostra o que falta e onde colocar.
+
 ## Outras famílias para avaliar (não foram executadas)
 
 Do `docs/model_licenses.md` do audio.cpp v0.9.6; "uso comercial" é o resumo do projeto, vale a licença do texto original.
@@ -188,7 +271,7 @@ As três LFM só valem se a receita da organização ficar abaixo do limite: dec
   de áudio de uma pessoa só fica protegido contra impostores, não contra um cliente extra.
 - A saída da rota ao vivo é PCM de 16 bits (o servidor codifica assim); a entrada pode ser f32.
 - Mono 48 kHz de saída; o checkpoint realtime atende só os últimos 12 s de contexto.
-- Vulkan e CPU-only não foram construídos (sem `glslc`); só CUDA 12.0 + g++-12. Nada foi instalado. Outro toolkit
+- Vulkan e CPU-only não foram construídos (sem `glslc`); só CUDA 12.0 + g++-12. O app aceita os dois (`KALANGO_AUDIOCPP_BACKEND`), mas nenhum foi exercitado. Nada foi instalado. Outro toolkit
   mudaria a regra do compilador de host.
 - Binários de 320 a 385 MB cada (CUDA estático); em ISO, preferir uma compilação com só as famílias usadas.
 - O audio.cpp é jovem (v0.9.x, 0.2.1 interno, formato dos GGUF e das especificações ainda muda): fixar o commit e

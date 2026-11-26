@@ -3,6 +3,9 @@
 Crate `crates/kalango-isolar-voz`: lê os safetensors oficiais por mmap e roda a rede em Rust puro (AVX2/FMA, sem
 Python nem libtorch). Pesos e código de origem: Apache-2.0 (ver `PROVENIENCIA.md`); os pesos não ficam no git.
 
+> **Backend de produção**: o bloco "Isolar voz" do app usa o audio.cpp (`AUDIO-CPP.md`). Esta porta em Rust é só a
+> referência de paridade e auditoria (CPU, RTF 3 a 4, não é tempo real).
+
 ## Estado
 
 - `cargo check`, `cargo clippy --all-targets -- -D warnings` e `cargo fmt --check` limpos no crate.
