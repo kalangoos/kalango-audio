@@ -13,6 +13,8 @@ gtk = { package = "gtk4", version = "0.9", features = ["v4_14"] }
 # the Design System's springs (rápida, suave, elástica, lenta) and the widget that animates them, shared with KalangoOS
 kalango-movimento = { git = "https://github.com/kalangoos/kalangoos", rev = "cd9ad9d4368605f7f302c3927138454f93bb6637" }
 hound = "3.5.1"
+# voice isolation backend: controls audio.cpp's server as a child process
+kalango-audiocpp = { path = "crates/kalango-audiocpp" }
 image = { version = "0.25.10", default-features = false, features = ["png"] }
 libc = "0.2.191"
 libloading = "0.9.1"
@@ -29,3 +31,4 @@ debug = 1
 # a project of its own: built inside another repository's folder (the KalangoOS release puts it under apps/), cargo
 # would otherwise take that repository's workspace for its own
 [workspace]
+members = ["crates/kalango-isolar-voz", "crates/kalango-audiocpp"]

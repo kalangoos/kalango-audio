@@ -1042,6 +1042,7 @@ fn settings(cx: &Cx) {
                 Some((if vad > 0.5 { trf("Voice present ({n})", &[("n", pct(vad))]) } else { tr("No voice").to_string() }, false))
             });
         }
+        "voice_isolate" => voice_isolate(cx),
         "convolution" => {
             cx.slider(tr("Input gain"), "pregain", -24.0, 12.0, 0.5, 0.0, dbs);
             cx.file(tr("Impulse response (an audio file)"), "ir", "~/impulses/room.wav", false);
@@ -1103,6 +1104,64 @@ fn settings(cx: &Cx) {
         }
         _ => {}
     }
+}
+
+/// Whether a microphone feeds the block, directly or through other blocks.
+fn fed_by_microphone(c: &Core, id: u64, depth: u32) -> bool {
+    let Some(s) = c.session() else { return false };
+    depth < 8 && s.blocks.iter().filter(|b| b.outs.contains(&id)).any(|b| b.kind == "device_input" || fed_by_microphone(c, b.id, depth + 1))
+}
+
+/// "Isolate voice": the AI model of audio.cpp, on this computer. What is missing (and where it goes) when something
+/// is, otherwise the live state, the delay and where the model runs.
+fn voice_isolate(cx: &Cx) {
+    let missing = crate::isolator::missing();
+    match &missing {
+        Some(m) => {
+            cx.error_note(tr("Voice isolation is not set up yet."));
+            cx.note(&m.message());
+            let again = button(tr("Check again"), "secundario", None);
+            again.set_halign(Align::Start);
+            let insp = cx.insp.clone();
+            again.connect_clicked(move |_| insp.rebuild(false));
+            cx.add(&again);
+        }
+        None => {
+            cx.note(tr("An AI model keeps only the voice and removes the rest. It runs on this computer; the sound never leaves it."));
+            let again = button(tr("Try again"), "fantasma", None);
+            again.set_halign(Align::Start);
+            again.set_tooltip_text(Some(tr("If the voice model gave up after repeated failures, starts it again")));
+            again.connect_clicked(|_| crate::isolator::retry());
+            cx.add(&again);
+        }
+    }
+    cx.slider(tr("Intensity"), "amount", 0.0, 1.0, 0.01, 1.0, pct);
+    cx.note(tr("100 % keeps only the isolated voice. Lower it to let some of the original sound back in."));
+    if !fed_by_microphone(&cx.ui().core.borrow(), cx.id, 0) {
+        cx.note(tr("Made for the microphone. With other sources it works too, but the sound comes out a tenth of a second late compared with anything that does not go through this block."));
+    }
+    let uid = cx.insp.built_uid();
+    cx.live_label("ka-texto2", move |c, b| {
+        c.session().filter(|s| c.is_running(s.uid))?;
+        let r = c.rec_status(uid, b.id)?;
+        if r.state.is_empty() {
+            return None;
+        }
+        Some(crate::isolator::state_text(&r.state))
+    });
+    cx.live_label("ka-fraco2", move |c, b| {
+        let r = c.rec_status(uid, b.id)?;
+        if r.state != "running" {
+            return None;
+        }
+        let delay = trf("Delay {ms} ms", &[("ms", format!("{:.0}", r.seconds * 1000.0))]);
+        Some((match crate::isolator::server_line() {
+            Some(line) => format!("{delay} · {line}"),
+            None => delay,
+        }, false))
+    });
+    cx.note(tr("The model starts when the session runs and stops a while after the block is switched off. Switch the block off to hear the original."));
+    cx.note(tr("To clean a recording that already exists, use “Isolate voice” in Recordings."));
 }
 
 fn device_choice(cx: &Cx) {

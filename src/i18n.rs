@@ -24,6 +24,7 @@ macro_rules! screens {
             ("ajustes", include_str!(concat!("../locales/", $lang, "/ajustes.json"))),
             ("agente", include_str!(concat!("../locales/", $lang, "/agente.json"))),
             ("estados", include_str!(concat!("../locales/", $lang, "/estados.json"))),
+            ("isolar", include_str!(concat!("../locales/", $lang, "/isolar.json"))),
         ]
     };
 }

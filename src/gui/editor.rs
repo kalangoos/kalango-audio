@@ -245,6 +245,7 @@ pub fn summary(b: &Block, devices: &[(String, String)]) -> String {
             let lang = if lang == "auto" || lang.is_empty() { tr("any language").to_string() } else { lang };
             trf("Live · {lang}", &[("lang", lang)])
         }
+        "voice_isolate" => trf("Intensity {amount}", &[("amount", pct(p.num("amount", 1.0)))]),
         "voice_denoise" => if p.num("mono", 0.0) > 0.5 { tr("Mono · RNNoise") } else { tr("Stereo · RNNoise") }.to_string(),
         "noise_reduction" => trf("Noise {db}", &[("db", db(-p.num("reduction", 6.0)))]),
         "balance" => side(p.num("balance", 0.0)),

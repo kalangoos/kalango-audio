@@ -150,6 +150,7 @@ pub const KINDS: &[KindInfo] = &[
     KindInfo { id: "transcribe", title: n_("Transcribe"), desc: n_("Turn speech into text while recording"), cat: Cat::Advanced, working: true },
     KindInfo { id: "ladspa_plugin", title: n_("LADSPA plug-in"), desc: n_("Use a LADSPA effect installed on the system"), cat: Cat::Advanced, working: true },
     KindInfo { id: "voice_denoise", title: n_("Clean voice"), desc: n_("Remove background noise from speech (RNNoise)"), cat: Cat::Advanced, working: true },
+    KindInfo { id: "voice_isolate", title: n_("Isolate voice"), desc: n_("Keep only the voice and remove everything else (AI model, on this computer)"), cat: Cat::Advanced, working: true },
     KindInfo { id: "convolution", title: n_("Convolution"), desc: n_("Apply an impulse response (FIR) from a file"), cat: Cat::Advanced, working: true },
     KindInfo { id: "noise_reduction", title: n_("Noise reduction"), desc: n_("Learn the background noise and lower it"), cat: Cat::Advanced, working: true },
     KindInfo { id: "ducking", title: n_("Duck under voice"), desc: n_("Lower the other sources when someone speaks"), cat: Cat::Advanced, working: true },
@@ -188,6 +189,7 @@ pub fn default_params(kind: &str) -> Params {
         "click_removal" => p.set("sens", 3.0),
         "mixer" => for i in 0..5 { p.set(&format!("g{i}"), 1.0); p.set(&format!("m{i}"), 0.0); p.set(&format!("s{i}"), 0.0); p.set(&format!("b{i}"), 0.0); p.set(&format!("p{i}"), 0.0); p.set(&format!("fo{i}"), 0.0); },
         "voice_denoise" => p.set("mono", 0.0),
+        "voice_isolate" => p.set("amount", 1.0),
         "stereo_widen" => p.set("crossover", 500.0),
         "ladspa_plugin" => p.set_text("plugin", ""),
         "convolution" => { p.set_text("ir", ""); p.set("pregain", 0.0); }

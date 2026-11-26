@@ -854,11 +854,18 @@ fn run(sh: Arc<Shared>, stop: Arc<AtomicBool>) {
                         if matches!(b.kind.as_str(), "convolution" | "ladspa_plugin") {
                             sh.rec.lock().unwrap().insert(id, RecStatus { state: r.dsp.note.clone(), ..Default::default() });
                         }
+                        if b.kind == "voice_isolate" {
+                            // (the delay of the isolated sound, in seconds, goes in `seconds`)
+                            sh.rec.lock().unwrap().insert(id, RecStatus { seconds: r.dsp.aux, state: r.dsp.note.clone(), ..Default::default() });
+                        }
                     }
                 }
             } else if matches!(b.kind.as_str(), "radio_stream" | "rtmp_stream" | "transcribe") {
                 r.tf_tx = None;
                 r.sink = None;
+            } else if b.kind == "voice_isolate" {
+                r.dsp.release_isolator();
+                sh.rec.lock().unwrap().remove(&id);
             } else if b.kind == "recorder" {
                 if let Some(rs) = r.rs.as_mut() { if let Some(rec) = rs.rec.take() { end_file(&sh, id, rec); } }
             }

@@ -145,7 +145,7 @@ pub fn kind_token(kind: &str) -> &'static str {
 pub fn kind_icon(kind: &str) -> &'static str {
     match kind {
         "app_source" => "apps-pontos",
-        "device_input" | "voice_denoise" => "microfone",
+        "device_input" | "voice_denoise" | "voice_isolate" => "microfone",
         "system_sound" => "volume",
         "test_tone" => "anel",
         "device_output" => "fone",

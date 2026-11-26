@@ -59,6 +59,16 @@ pub fn demo_core() -> Core {
         }
     }
     sessions.insert(0, tone);
+    // the live voice isolation chain: microphone, isolated voice, then the headphones and a recording
+    let mut iso = Session::new("Microfone só com a voz");
+    let (m, v, o, r) = (iso.add_block("device_input", 2.0, 2.0), iso.add_block("voice_isolate", 8.0, 2.0), iso.add_block("device_output", 14.0, 0.0), iso.add_block("recorder", 14.0, 4.0));
+    iso.connect(m, v);
+    iso.connect(v, o);
+    iso.connect(v, r);
+    if let Some(b) = iso.blocks.iter_mut().find(|b| b.id == r) {
+        b.p.set_text("folder", &folder);
+    }
+    sessions.push(iso);
     // recordings: a tone that swells like speech, a few seconds each, dated over the week
     let now = std::time::SystemTime::now();
     let files = [

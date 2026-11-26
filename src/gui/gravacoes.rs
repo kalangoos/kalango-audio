@@ -637,8 +637,9 @@ fn more_menu(ui: &Rc<Ui>, page: &Rc<Page>, path: &Path) -> gtk::MenuButton {
     pop.add_css_class("ka-grav-menu");
     let items = vbox(2, "");
     let fav = ui.core.borrow().is_favourite(path);
-    let entries: [(&str, &str, u8); 6] = [
+    let entries: [(&str, &str, u8); 7] = [
         ("spark", tr("Summarize"), 5),
+        ("microfone", tr("Isolate voice"), 6),
         ("pasta", tr("Show in Files"), 0),
         ("ajustes", tr("Open in editor"), 1),
         ("lapis", tr("Rename…"), 2),
@@ -667,6 +668,7 @@ fn more_menu(ui: &Rc<Ui>, page: &Rc<Page>, path: &Path) -> gtk::MenuButton {
                     select(&u, &pg, &path);
                     summarize(&u, &path);
                 }
+                6 => isolate_voice(&u, &path),
                 _ => trash(&u, &pg, &path),
             }
         });
@@ -1302,6 +1304,13 @@ fn refresh_detail(ui: &Rc<Ui>, page: &Rc<Page>) {
     acts1.append(&srt);
     acts1.append(&sum);
     page.side.append(&acts1);
+    let acts3 = hbox(8, "");
+    acts3.set_margin_top(8);
+    let isolate = button(tr("Isolate voice"), "fantasma", Some("microfone"));
+    isolate.set_sensitive(!ISOLATING.with(|j| j.get()));
+    isolate.set_tooltip_text(Some(tr("Saves a copy of this recording with only the voice, beside it")));
+    acts3.append(&isolate);
+    page.side.append(&acts3);
     let acts2 = hbox(8, "");
     acts2.set_margin_top(8);
     let files = button(tr("Show in Files"), "fantasma", Some("pasta"));
@@ -1423,6 +1432,10 @@ fn refresh_detail(ui: &Rc<Ui>, page: &Rc<Page>) {
     {
         let (u, path) = (ui.clone(), r.path.clone());
         sum.connect_clicked(move |_| summarize(&u, &path));
+    }
+    {
+        let (u, path) = (ui.clone(), r.path.clone());
+        isolate.connect_clicked(move |_| isolate_voice(&u, &path));
     }
     {
         let path = r.path.clone();
@@ -1599,6 +1612,71 @@ pub fn summarize(ui: &Rc<Ui>, path: &Path) {
                 refill_slot(&u);
                 glib::ControlFlow::Break
             }
+        }
+    });
+}
+
+// ---------------------------------------------------------------- voice isolation of a recording
+
+thread_local! {
+    /// A voice isolation is running (one at a time: the model is one).
+    static ISOLATING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Isolates the voice of a recording with audio.cpp and saves the result beside it ("name (isolated).wav"). Says what
+/// is missing when the server or the model is not installed; nothing is downloaded.
+pub fn isolate_voice(ui: &Rc<Ui>, path: &Path) {
+    if ISOLATING.with(|j| j.get()) {
+        ui.toast(tr("Another voice isolation is running; wait for it to finish."), None);
+        return;
+    }
+    if let Some(m) = crate::isolator::missing() {
+        ui.toast(&m.message(), None);
+        return;
+    }
+    ISOLATING.with(|j| j.set(true));
+    let on_cpu = !kalango_audiocpp::discovery::choose_backend(&|k| std::env::var(k).ok(), kalango_audiocpp::discovery::nvidia_present()).is_gpu();
+    ui.toast(
+        &if on_cpu {
+            tr("Isolating the voice on the processor: it can take several times the length of the recording. The copy is saved beside it.").to_string()
+        } else {
+            tr("Isolating the voice… the copy is saved beside the recording.").to_string()
+        },
+        None,
+    );
+    let (tx, rx) = std::sync::mpsc::channel::<Result<crate::isolator::Outcome, String>>();
+    let p2 = path.to_path_buf();
+    std::thread::spawn(move || {
+        let cancel = std::sync::atomic::AtomicBool::new(false);
+        let _ = tx.send(crate::isolator::isolate_recording(&p2, 1.0, &cancel, |_| {}));
+    });
+    let u = ui.clone();
+    glib::timeout_add_local(std::time::Duration::from_millis(300), move || match rx.try_recv() {
+        Err(std::sync::mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+        Err(_) => {
+            ISOLATING.with(|j| j.set(false));
+            glib::ControlFlow::Break
+        }
+        Ok(r) => {
+            ISOLATING.with(|j| j.set(false));
+            match r {
+                Ok(o) => {
+                    let name = o.path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                    u.toast(
+                        &trf("Voice isolated: “{file}” was saved ({took} s for {len} s of sound · {backend}).", &[
+                            ("file", name),
+                            ("took", format!("{:.0}", o.took)),
+                            ("len", format!("{:.0}", o.seconds)),
+                            ("backend", crate::isolator::backend_name(o.backend).to_string()),
+                        ]),
+                        None,
+                    );
+                    u.core.borrow_mut().rec_scanned = None;
+                    u.changed(Change::Recordings);
+                }
+                Err(e) => u.toast(&e, None),
+            }
+            glib::ControlFlow::Break
         }
     });
 }

@@ -4,6 +4,7 @@ mod dsp;
 mod engine;
 mod gui;
 mod i18n;
+mod isolator;
 mod ladspa;
 mod media;
 mod meter;
@@ -49,7 +50,10 @@ fn main() -> std::process::ExitCode {
         selftest::selftest_load();
         return std::process::ExitCode::SUCCESS;
     }
-    if gui::run() == gtk::glib::ExitCode::SUCCESS {
+    let code = gui::run();
+    // the voice isolation server (when one was started) ends with the app
+    isolator::shutdown();
+    if code == gtk::glib::ExitCode::SUCCESS {
         std::process::ExitCode::SUCCESS
     } else {
         std::process::ExitCode::FAILURE
