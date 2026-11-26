@@ -4,9 +4,13 @@
 //! Process rules: absolute binary path, no shell, cleared environment, `PR_SET_PDEATHSIG`, pidfd-based signals and
 //! kill-on-drop. Streaming uses the server's `POST /v1/audio/speech/live` (chunked raw PCM in, chunked raw PCM out).
 
+pub mod discovery;
 mod http;
+pub mod live;
+pub mod offline;
 mod ownership;
 mod process;
+pub mod service;
 
 use std::fmt;
 use std::io::{self, BufReader, Write};
@@ -64,12 +68,27 @@ pub enum Backend {
 }
 
 impl Backend {
-    fn as_str(self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             Backend::Cuda => "cuda",
             Backend::Vulkan => "vulkan",
             Backend::Cpu => "cpu",
         }
+    }
+
+    /// The backend named in `/health` (`"cuda"`, `"vulkan"`, `"cpu"`).
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "cuda" => Some(Backend::Cuda),
+            "vulkan" => Some(Backend::Vulkan),
+            "cpu" => Some(Backend::Cpu),
+            _ => None,
+        }
+    }
+
+    /// Whether this backend runs on a graphics card.
+    pub fn is_gpu(self) -> bool {
+        self != Backend::Cpu
     }
 }
 
@@ -102,6 +121,13 @@ impl Config {
         base.join(format!("kalango-audiocpp-{}", std::process::id()))
     }
 
+    /// Removes the work folders of earlier runs that crashed (their process is gone, so nothing cleaned up): folders
+    /// named `kalango-audiocpp-<pid>` in the same place as [`Config::private_work_dir`], ours, whose pid does not run.
+    pub fn remove_stale_work_dirs() {
+        let base = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from).unwrap_or_else(std::env::temp_dir);
+        remove_stale_work_dirs_in(&base);
+    }
+
     pub fn new(server_bin: PathBuf, model: PathBuf, work_dir: PathBuf) -> Self {
         Self {
             server_bin,
@@ -128,6 +154,22 @@ impl Config {
             self.threads,
             json_string(&self.model.to_string_lossy()),
         )
+    }
+}
+
+fn remove_stale_work_dirs_in(base: &Path) {
+    use std::os::unix::fs::MetadataExt;
+    let Ok(entries) = std::fs::read_dir(base) else { return };
+    // SAFETY: plain syscall without arguments.
+    let me = unsafe { libc::getuid() };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let Some(pid) = name.strip_prefix("kalango-audiocpp-").and_then(|p| p.parse::<u32>().ok()) else { continue };
+        // a real folder of ours (never a link), and nobody runs under that pid
+        let Ok(meta) = std::fs::symlink_metadata(entry.path()) else { continue };
+        if meta.is_dir() && meta.uid() == me && !Path::new(&format!("/proc/{pid}")).exists() {
+            let _ = std::fs::remove_dir_all(entry.path());
+        }
     }
 }
 
@@ -182,7 +224,15 @@ impl Server {
         let config_path =
             ownership::write_private(&config.work_dir, "audiocpp-server.json", &config.server_json(port))?;
         let log = config.work_dir.join("audiocpp-server.log");
-        let args = vec!["--config".to_string(), config_path.to_string_lossy().into_owned()];
+        // no WebUI (nothing to serve to a browser), one resident model; the server binds 127.0.0.1 (see `server_json`) and
+        // has no model manager or download here (that needs `--ui-management`, which is never passed)
+        let args = vec![
+            "--config".to_string(),
+            config_path.to_string_lossy().into_owned(),
+            "--no-ui".to_string(),
+            "--max-loaded-models".to_string(),
+            "1".to_string(),
+        ];
         let process = Process::spawn(&config.server_bin, &args, &config.env, &log)?;
         let server =
             Server { process, addr: SocketAddr::from((Ipv4Addr::LOCALHOST, port)), io_timeout: config.io_timeout, log };
@@ -233,6 +283,17 @@ impl Server {
         }
     }
 
+    /// The backend the running server says it uses (`backend` in the `/health` answer): what it really runs on, which
+    /// may differ from the one asked for (a CUDA build on a machine without a card falls back to the CPU).
+    pub fn reported_backend(&self) -> Result<Option<Backend>> {
+        self.verify_owner()?;
+        let (status, body) = http::get(self.addr, "/health", Duration::from_secs(2))?;
+        if status != 200 {
+            return Err(Error::Http(status, body));
+        }
+        Ok(backend_in_health(&body))
+    }
+
     /// `true` while the process runs.
     pub fn is_running(&mut self) -> bool {
         matches!(self.process.try_wait(), Ok(None))
@@ -248,6 +309,13 @@ impl Server {
         self.verify_owner()?;
         Stream::open(self.addr, self.io_timeout)
     }
+}
+
+/// `"backend":"cuda"` in a `/health` body (the one field read; the body is small and flat).
+fn backend_in_health(body: &str) -> Option<Backend> {
+    let rest = body.split("\"backend\"").nth(1)?;
+    let value = rest.trim_start().strip_prefix(':')?.trim_start().strip_prefix('"')?;
+    Backend::from_name(value.split('"').next()?)
 }
 
 fn free_port() -> io::Result<u16> {
@@ -394,6 +462,36 @@ mod tests {
         assert!(j.contains(r#""port":1234"#) && j.contains(r#""backend":"cpu""#));
         assert!(j.contains(r#""path":"/m/a \"b\".gguf""#));
         assert!(j.contains(r#""voice_isolator.lookahead_frames":4"#));
+    }
+
+    #[test]
+    fn the_reported_backend_is_read_from_the_health_body() {
+        let real = r#"{"status":"ok","backend":"cuda","models":1,"ui":true,"version":"dev"}"#;
+        assert_eq!(backend_in_health(real), Some(Backend::Cuda));
+        assert_eq!(backend_in_health(r#"{"backend": "cpu"}"#), Some(Backend::Cpu));
+        assert_eq!(backend_in_health(r#"{"status":"ok"}"#), None);
+        assert_eq!(backend_in_health(r#"{"backend":"metal"}"#), None);
+    }
+
+    #[test]
+    fn work_folders_of_crashed_runs_are_removed_and_live_ones_kept() {
+        let base = std::env::temp_dir().join(format!("kalango-stale-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let mine = base.join(format!("kalango-audiocpp-{}", std::process::id()));
+        let dead = base.join("kalango-audiocpp-4194999");
+        let other = base.join("something-else-4194999");
+        let target = base.join("target");
+        for d in [&mine, &dead, &other, &target] {
+            std::fs::create_dir_all(d).unwrap();
+        }
+        std::fs::write(dead.join("audiocpp-server.log"), b"x").unwrap();
+        std::os::unix::fs::symlink(&target, base.join("kalango-audiocpp-4194998")).unwrap();
+        remove_stale_work_dirs_in(&base);
+        assert!(mine.exists(), "a running process's folder stays");
+        assert!(!dead.exists(), "the crashed run's folder goes");
+        assert!(other.exists() && target.exists(), "only our own naming is touched");
+        assert!(base.join("kalango-audiocpp-4194998").exists(), "a symlink is never followed or removed");
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]
