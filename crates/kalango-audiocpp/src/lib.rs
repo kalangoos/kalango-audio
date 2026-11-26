@@ -5,11 +5,12 @@
 //! kill-on-drop. Streaming uses the server's `POST /v1/audio/speech/live` (chunked raw PCM in, chunked raw PCM out).
 
 mod http;
+mod ownership;
 mod process;
 
 use std::fmt;
 use std::io::{self, BufReader, Write};
-use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
+use std::net::{Ipv4Addr, SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::thread::JoinHandle;
@@ -93,6 +94,12 @@ pub struct Config {
 }
 
 impl Config {
+    /// A fresh private directory name under `XDG_RUNTIME_DIR` (per user, mode 0700), else the temp dir.
+    pub fn private_work_dir() -> PathBuf {
+        let base = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from).unwrap_or_else(std::env::temp_dir);
+        base.join(format!("kalango-audiocpp-{}", std::process::id()))
+    }
+
     pub fn new(server_bin: PathBuf, model: PathBuf, work_dir: PathBuf) -> Self {
         Self {
             server_bin,
@@ -144,29 +151,43 @@ pub struct Server {
 }
 
 impl Server {
-    /// Starts the server and waits until `/health` answers 200 (or the timeout / an early exit).
+    /// Starts the server and waits until it listens and `/health` answers 200 (or the timeout / an early exit).
+    ///
+    /// The server binds port 0 and the port is read back from the kernel as the child's own listening socket, so no
+    /// other process can be mistaken for it (see `ownership`). The work directory must be private (0700, ours).
     pub fn spawn(config: &Config) -> Result<Self> {
-        std::fs::create_dir_all(&config.work_dir)?;
-        let port = free_port()?;
-        let config_path = config.work_dir.join("audiocpp-server.json");
-        std::fs::write(&config_path, config.server_json(port))?;
+        ownership::private_dir(&config.work_dir)?;
+        let config_path = ownership::write_private(&config.work_dir, "audiocpp-server.json", &config.server_json(0))?;
         let log = config.work_dir.join("audiocpp-server.log");
         let args = vec!["--config".to_string(), config_path.to_string_lossy().into_owned()];
         let process = Process::spawn(&config.server_bin, &args, &config.env, &log)?;
         let mut server =
-            Server { process, addr: SocketAddr::from((Ipv4Addr::LOCALHOST, port)), io_timeout: config.io_timeout, log };
+            Server { process, addr: SocketAddr::from((Ipv4Addr::LOCALHOST, 0)), io_timeout: config.io_timeout, log };
         let deadline = Instant::now() + config.startup_timeout;
         loop {
             if let Some(code) = server.process.try_wait()? {
                 return Err(Error::ServerExited(code));
             }
-            if server.health().is_ok() {
+            if server.addr.port() == 0 {
+                if let Ok(Some(port)) = ownership::listening_port_of(server.process.id()) {
+                    server.addr.set_port(port);
+                }
+            }
+            if server.addr.port() != 0 && server.health().is_ok() {
                 return Ok(server);
             }
             if Instant::now() >= deadline {
                 return Err(Error::Timeout("the server did not become healthy"));
             }
             std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+
+    /// Fails unless the port we talk to is still the child's own listening socket.
+    fn verify_owner(&self) -> Result<()> {
+        match ownership::listening_port_of(self.process.id()) {
+            Ok(Some(port)) if port == self.addr.port() => Ok(()),
+            _ => Err(Error::Protocol("the port is not the spawned server's listening socket".into())),
         }
     }
 
@@ -184,6 +205,7 @@ impl Server {
 
     /// `GET /health`; `Ok` only for a 200.
     pub fn health(&self) -> Result<()> {
+        self.verify_owner()?;
         let (status, body) = http::get(self.addr, "/health", Duration::from_secs(2))?;
         if status == 200 {
             Ok(())
@@ -204,13 +226,9 @@ impl Server {
 
     /// Opens a live stream: push 48 kHz mono f32 samples, pull isolated samples (latency about 62.7 ms by default).
     pub fn open_stream(&self) -> Result<Stream> {
+        self.verify_owner()?;
         Stream::open(self.addr, self.io_timeout)
     }
-}
-
-fn free_port() -> io::Result<u16> {
-    // Bind to port 0, read the port, release it: a small race with other processes, accepted for loopback.
-    Ok(TcpListener::bind((Ipv4Addr::LOCALHOST, 0))?.local_addr()?.port())
 }
 
 /// One live exchange: chunked PCM (f32 little endian, 48 kHz mono) goes in, 16-bit PCM comes back as `f32`.

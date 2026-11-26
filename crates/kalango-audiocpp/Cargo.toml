@@ -12,3 +12,9 @@ libc = "0.2.191"
 [dev-dependencies]
 # metrics (SI-SDR, max abs error) for the parity example, and the Rust port as the audit reference
 kalango-isolar-voz = { path = "../kalango-isolar-voz" }
+
+[[bin]]
+# stand-in for audiocpp_server used by tests/ownership.rs
+name = "fake_audiocpp_server"
+path = "tests/support/fake_server.rs"
+test = false
