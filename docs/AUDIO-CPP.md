@@ -35,8 +35,7 @@ scripts/build_linux.sh --deployment-build --backend cuda --cuda-arch 86 \
   `-j4` e `nice`); `--deployment-build` embute o catálogo de especificações. Sem WebUI: o `dist` do WebUI é opcional e o
   servidor embute uma página vazia; **não precisa de node**.
 - Tamanhos: cada binário tem 320 a 385 MB (runtime CUDA ligado estaticamente), árvore de fonte 370 MB, diretório de
-  build cerca de 3,3 GB; tudo em `~/.cache/kalango-audiocpp` (4,0 GB com os pesos). Nada fora de `~/.cache`, nada em
-  `/mnt/servidores`.
+  build cerca de 3,3 GB; tudo em `~/.cache/kalango-audiocpp` (4,0 GB com os pesos). Nada fora de `~/.cache`.
 - Para empacotar mais famílias, mudar `--models` (lista separada por vírgula) e reconstruir.
 
 ## Pesos
