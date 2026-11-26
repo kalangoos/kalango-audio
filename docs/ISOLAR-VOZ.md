@@ -60,6 +60,11 @@ de pico teórico f32 do 5700G (estimativa, não medição). O Rust é 1,6x a 2,7
 menos memória, mas para tempo real ao vivo é preciso GPU (a RTX 3090 desta máquina não é usada por este código) ou
 quantização/modelo menor. Uso viável hoje: offline, em lote.
 
+## Backend de produção
+
+O caminho em tempo real é o audio.cpp em CUDA (RTF 0,147 no fluxo, 0,068 offline), controlado pelo crate
+`kalango-audiocpp`: ver `AUDIO-CPP.md`. Esta porta fica como referência de paridade e auditoria.
+
 ## O que falta
 
 - Caminho de GPU (CUDA/Vulkan) ou quantização int8/bf16 para chegar a RTF < 1.
