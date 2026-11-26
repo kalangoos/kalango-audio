@@ -44,6 +44,7 @@ pub fn short_desc(kind: &str) -> &'static str {
         "transcribe" => n_("Speech becomes text"),
         "ladspa_plugin" => n_("System effects"),
         "voice_denoise" => n_("Takes noise out of speech"),
+        "voice_isolate" => n_("Keeps only the voice"),
         "convolution" => n_("Impulse response"),
         "noise_reduction" => n_("Learns and lowers noise"),
         "ducking" => n_("Ducking"),

@@ -193,6 +193,11 @@ pub fn has_sound(samples: &[f32]) -> bool {
 
 /// A recording as 16 kHz mono samples: WAV directly, other formats through ffmpeg.
 pub fn read_mono(path: &Path) -> Result<Vec<f32>, String> {
+    read_mono_rate(path, RATE)
+}
+
+/// A recording as mono samples at `rate`: WAV directly, other formats through ffmpeg.
+pub fn read_mono_rate(path: &Path, rate: u32) -> Result<Vec<f32>, String> {
     let ext = path.extension().and_then(|x| x.to_str()).unwrap_or("").to_lowercase();
     if ext == "wav" {
         let mut r = hound::WavReader::open(path).map_err(|e| e.to_string())?;
@@ -206,12 +211,12 @@ pub fn read_mono(path: &Path) -> Result<Vec<f32>, String> {
             }
         };
         let mono: Vec<f32> = all.chunks(ch).map(|c| c.iter().sum::<f32>() / c.len() as f32).collect();
-        return Ok(resample(&mono, spec.sample_rate, RATE));
+        return Ok(resample(&mono, spec.sample_rate, rate));
     }
     let o = std::process::Command::new("ffmpeg")
         .args(["-v", "quiet", "-i"])
         .arg(path)
-        .args(["-ac", "1", "-ar", &RATE.to_string(), "-f", "s16le", "-"])
+        .args(["-ac", "1", "-ar", &rate.to_string(), "-f", "s16le", "-"])
         .output()
         .map_err(|_| tr("ffmpeg is needed to read this format").to_string())?;
     Ok(o.stdout.chunks_exact(2).map(|c| i16::from_le_bytes([c[0], c[1]]) as f32 / 32768.0).collect())

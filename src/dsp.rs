@@ -134,6 +134,10 @@ pub struct Dsp {
     plugin_key: String,
     /// Mixer fade state per track (0 = full level, 1 = faded out)
     pub fade_out: [f32; 5],
+    /// Voice isolation (audio.cpp): the live stream, the state last reported, and when the installation was last looked at
+    iso: Option<Box<kalango_audiocpp::live::LiveIsolator>>,
+    iso_state: Option<kalango_audiocpp::live::LiveState>,
+    iso_checked: Option<std::time::Instant>,
 }
 
 impl Dsp {
@@ -154,6 +158,7 @@ impl Dsp {
             "balance" => apply_balance(buf, p.num("balance", 0.0) as f32),
             "pan" => apply_pan(buf, p.num("pan", 0.0) as f32),
             "voice_denoise" => self.rnnoise(buf, p),
+            "voice_isolate" => self.isolate_voice(buf, p),
             "convolution" => self.fir_filter(buf, p),
             "ladspa_plugin" => self.plugin_fx(buf, p),
             "tone_control" => {
@@ -377,6 +382,44 @@ impl Dsp {
             *f = [l, r];
         }
         self.aux = vad as f64;
+    }
+
+    /// Live voice isolation through audio.cpp. The sound passes through unchanged until the model is ready (and
+    /// whenever it is not: missing files, a restarting server, a model too slow); `note` carries the state to the
+    /// window and `aux` the delay in seconds.
+    fn isolate_voice(&mut self, buf: &mut [Frame], p: &Params) {
+        use crate::isolator;
+        if self.iso.is_none() {
+            // not installed: look again every few seconds (the person may be installing it while the session runs)
+            if self.iso_checked.is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(3)) {
+                return;
+            }
+            self.iso_checked = Some(std::time::Instant::now());
+            match isolator::service() {
+                Ok(service) => self.iso = Some(Box::new(kalango_audiocpp::live::LiveIsolator::new(service))),
+                Err(missing) => {
+                    self.note = format!("error: {}", missing.message().lines().next().unwrap_or(""));
+                    return;
+                }
+            }
+        }
+        let Some(iso) = self.iso.as_mut() else { return };
+        iso.process(buf, p.num("amount", 1.0) as f32);
+        let state = iso.state();
+        if self.iso_state.as_ref() != Some(&state) {
+            self.note = isolator::state_code(&state);
+            self.iso_state = Some(state);
+        }
+        self.aux = iso.latency_ms() as f64 / 1000.0;
+    }
+
+    /// The block was switched off or removed: let go of the model (the server stops by itself a while later).
+    pub fn release_isolator(&mut self) {
+        self.iso = None;
+        self.iso_state = None;
+        self.iso_checked = None;
+        self.aux = 0.0;
+        self.note.clear();
     }
 
     /// Stereo widener for mono material; real stereo passes untouched.
@@ -1284,5 +1327,59 @@ mod tests {
         let side = |f: f32| run("stereo_widen", &[("crossover", 500.0)], sine(f, 0.4, 48000))[24000..].iter().map(|f| (f[0] - f[1]).abs()).fold(0.0, f32::max);
         let (d_low, d_high) = (side(60.0), side(3000.0));
         assert!(d_low < 0.01 && d_high > 0.3, "low band side {d_low}, high band side {d_high}");
+    }
+    /// The "Isolate voice" block: the original sound passes through (with an error to read) while the model is not
+    /// installed, and with a server it comes back as the isolated sound, lined up with the original.
+    #[test]
+    fn voice_isolate_passes_through_when_missing_and_isolates_with_a_server() {
+        let _lock = crate::isolator::TEST_ENV.lock().unwrap_or_else(|e| e.into_inner());
+        let b = blk("voice_isolate", &[("amount", 1.0)]);
+        let noise: Vec<f32> = {
+            let mut s = 5u32;
+            (0..SR as usize * 3).map(|_| { s = s.wrapping_mul(1664525).wrapping_add(1013904223); 0.6 * ((s >> 8) as f32 / (1u32 << 24) as f32 - 0.5) }).collect()
+        };
+        // 1. nothing installed
+        std::env::set_var("KALANGO_AUDIOCPP_SERVER", "/nonexistent/audiocpp_server");
+        std::env::set_var("KALANGO_AUDIOCPP_MODEL", "/nonexistent/model");
+        crate::isolator::shutdown();
+        let mut dsp = Dsp::default();
+        let mut chunk: Vec<Frame> = noise[..480].iter().map(|x| [*x, *x]).collect();
+        let before = chunk.clone();
+        dsp.process(&b, &mut chunk);
+        assert_eq!(chunk, before, "the original passes through");
+        assert!(dsp.note.starts_with("error:") && dsp.note.contains("audio.cpp"), "{}", dsp.note);
+        // 2. with the (fake) server
+        let Some(fake) = crate::isolator::fake_server() else {
+            eprintln!("skipped the server half: build the fake first (cargo test --workspace)");
+            return;
+        };
+        std::env::set_var("KALANGO_AUDIOCPP_SERVER", &fake);
+        std::env::set_var("KALANGO_AUDIOCPP_MODEL", std::env::current_exe().unwrap());
+        std::env::set_var("KALANGO_AUDIOCPP_BACKEND", "cuda");
+        let mut dsp = Dsp::default();
+        let started = std::time::Instant::now();
+        let mut out: Vec<f32> = Vec::new();
+        let mut fed = 0;
+        let mut running_at = None;
+        while fed + 480 <= noise.len() && started.elapsed().as_secs() < 20 {
+            let mut chunk: Vec<Frame> = noise[fed..fed + 480].iter().map(|x| [*x, *x]).collect();
+            dsp.process(&b, &mut chunk);
+            if dsp.note == "running" && running_at.is_none() {
+                running_at = Some(fed);
+            }
+            if running_at.is_some() { out.extend(chunk.iter().map(|f| f[0])); }
+            fed += 480;
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        let start = running_at.expect("the block reached the running state");
+        // out[k] belongs to input sample start + k - delay; the fake's gain is 0.5
+        let from = out.len() / 2;
+        let fits = |delay: usize| (from..out.len() - 500).all(|k| (out[k] - 0.5 * noise[start + k - delay]).abs() < 4e-4);
+        let delay = (0..8000).find(|d| start + from >= *d && fits(*d)).expect("the output is the isolated sound at a fixed delay");
+        assert!(delay > 0, "the model's answer is late, and the block says how late: {delay}");
+        assert!(dsp.aux > 0.0 && (dsp.aux * SR as f64 - delay as f64).abs() < 960.0, "delay shown {} s, real {delay} samples", dsp.aux);
+        dsp.release_isolator();
+        assert!(dsp.note.is_empty());
+        crate::isolator::shutdown();
     }
 }

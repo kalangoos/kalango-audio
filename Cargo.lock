@@ -1293,6 +1293,7 @@ dependencies = [
  "gtk4",
  "hound",
  "image",
+ "kalango-audiocpp",
  "kalango-movimento",
  "libc",
  "libloading",
