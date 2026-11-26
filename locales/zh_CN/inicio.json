@@ -1,0 +1,22 @@
+{
+ "Active · not recording": "活动中 · 未录制",
+ "Does not record · only routes the sound": "不录制 · 仅路由声音",
+ "Drag blocks or start from a template": "拖入模块，或从模板开始",
+ "Last recording": "最近的录音",
+ "Not now": "以后再说",
+ "Nothing recorded yet": "还没有录制任何内容",
+ "Recording · {time}": "正在录制 · {time}",
+ "Routing": "路由",
+ "Scheduled · {when}": "已计划 · {when}",
+ "See all": "查看全部",
+ "See the plan": "查看计划",
+ "Sound playing in {app}": "{app}中正在播放声音",
+ "Start with a template": "从模板开始",
+ "Stopped": "已停止",
+ "The agent can record the tab’s sound and your microphone and transcribe at the end. Nothing starts without your approval.": "智能体可以录制标签页的声音和你的麦克风，并在结束时转录。未经你的批准，什么都不会开始。",
+ "Your sessions": "你的会话",
+ "record the meeting in the browser and transcribe it": "录制浏览器中的会议并转录",
+ "with transcript": "有转录文本",
+ "{n} sessions · {a} active now · {r} recording": "{n}个会话 · {a}个正在活动 · {r}个正在录制",
+ "“{name}” deleted": "已删除“{name}”"
+}

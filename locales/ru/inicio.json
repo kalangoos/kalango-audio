@@ -1,0 +1,22 @@
+{
+ "Active · not recording": "Активен · без записи",
+ "Does not record · only routes the sound": "Не записывает · только направляет звук",
+ "Drag blocks or start from a template": "Перетащите блоки или начните с шаблона",
+ "Last recording": "Последняя запись",
+ "Not now": "Не сейчас",
+ "Nothing recorded yet": "Пока ничего не записано",
+ "Recording · {time}": "Идёт запись · {time}",
+ "Routing": "Маршрутизация",
+ "Scheduled · {when}": "Запланирован · {when}",
+ "See all": "Показать все",
+ "See the plan": "Посмотреть план",
+ "Sound playing in {app}": "Звук воспроизводится в {app}",
+ "Start with a template": "Начать с шаблона",
+ "Stopped": "Остановлено",
+ "The agent can record the tab’s sound and your microphone and transcribe at the end. Nothing starts without your approval.": "Агент может записать звук вкладки и ваш микрофон, а в конце расшифровать запись. Ничего не начнётся без вашего одобрения.",
+ "Your sessions": "Ваши сеансы",
+ "record the meeting in the browser and transcribe it": "записать встречу в браузере и расшифровать её",
+ "with transcript": "с расшифровкой",
+ "{n} sessions · {a} active now · {r} recording": "Сеансов: {n} · активны сейчас: {a} · идёт запись: {r}",
+ "“{name}” deleted": "«{name}» удалён"
+}

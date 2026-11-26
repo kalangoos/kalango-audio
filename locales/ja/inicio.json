@@ -1,0 +1,22 @@
+{
+ "Active · not recording": "アクティブ · 録音していません",
+ "Does not record · only routes the sound": "録音しません · 音をルーティングするだけです",
+ "Drag blocks or start from a template": "ブロックをドラッグするか、テンプレートから始めてください",
+ "Last recording": "最後の録音",
+ "Not now": "後で",
+ "Nothing recorded yet": "まだ何も録音されていません",
+ "Recording · {time}": "録音中 · {time}",
+ "Routing": "ルーティング",
+ "Scheduled · {when}": "予定 · {when}",
+ "See all": "すべて表示",
+ "See the plan": "プランを見る",
+ "Sound playing in {app}": "{app}で音声を再生中",
+ "Start with a template": "テンプレートから始める",
+ "Stopped": "停止済み",
+ "The agent can record the tab’s sound and your microphone and transcribe at the end. Nothing starts without your approval.": "エージェントはタブの音とマイクを録音し、最後に文字起こしできます。承認なしには何も始まりません。",
+ "Your sessions": "あなたのセッション",
+ "record the meeting in the browser and transcribe it": "ブラウザーの会議を録音して文字起こしして",
+ "with transcript": "文字起こしあり",
+ "{n} sessions · {a} active now · {r} recording": "{n}件のセッション · 現在アクティブ{a}件 · 録音中{r}件",
+ "“{name}” deleted": "「{name}」を削除しました"
+}
