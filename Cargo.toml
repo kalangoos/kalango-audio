@@ -29,4 +29,4 @@ debug = 1
 # a project of its own: built inside another repository's folder (the KalangoOS release puts it under apps/), cargo
 # would otherwise take that repository's workspace for its own
 [workspace]
-members = ["crates/kalango-isolar-voz"]
+members = ["crates/kalango-isolar-voz", "crates/kalango-audiocpp"]

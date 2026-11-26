@@ -1,0 +1,14 @@
+[package]
+name = "kalango-audiocpp"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+description = "Controls an audio.cpp (ggml) process from Rust: spawn/stop, health and live PCM streaming, like llama.cpp"
+publish = false
+
+[dependencies]
+libc = "0.2.191"
+
+[dev-dependencies]
+# metrics (SI-SDR, max abs error) for the parity example, and the Rust port as the audit reference
+kalango-isolar-voz = { path = "../kalango-isolar-voz" }

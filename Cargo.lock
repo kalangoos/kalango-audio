@@ -1303,6 +1303,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "kalango-audiocpp"
+version = "0.1.0"
+dependencies = [
+ "kalango-isolar-voz",
+ "libc",
+]
+
+[[package]]
 name = "kalango-isolar-voz"
 version = "0.1.0"
 dependencies = [
